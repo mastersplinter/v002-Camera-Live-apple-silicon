@@ -1,3 +1,16 @@
+## 2.0.0 Apple Silicon rewrite
+
+- Correct the Metal preview's inverted vertical orientation and verify pixels from the actual display drawable as well as the separate Syphon receiver.
+- Fix the preview's accidental 5 fps limit: use a display-synchronised Metal view with full-rate frames, bounded buffering and independent status updates.
+- Avoid periodic USB discovery during active capture; report a recent frame rate and add camera, Syphon and on-screen frame-pacing diagnostics.
+- Replace the legacy application with a Swift package, reusable CameraLiveCore library and SwiftUI macOS app.
+- Build the camera driver and all embedded dependencies for arm64; target macOS 13 and newer.
+- Replace Canon EDSDK with libgphoto2's PTP2 live-view backend, targeting the Canon EOS 550D.
+- Replace the OpenGL/turbojpeg video path with ImageIO, Core Image, shared IOSurfaces and Syphon Metal.
+- Add bounded frame buffering, explicit session cleanup, reconnect and sleep/wake handling, a live preview and stream statistics.
+- Add automated lifecycle/image tests, cross-process Syphon diagnostics and relocatable app packaging with architecture/signature audits.
+- Remove the obsolete Xcode project and framework placeholders; open Package.swift for development.
+
 ## 9
 
 * Update to latest Canon SDK (3.8.0), adding support for more cameras

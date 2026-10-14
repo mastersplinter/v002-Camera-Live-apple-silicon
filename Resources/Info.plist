@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+    <key>CFBundleIdentifier</key><string>info.v002.CameraLive.AppleSilicon</string>
+    <key>CFBundleName</key><string>Camera Live</string>
+    <key>CFBundleDisplayName</key><string>Camera Live</string>
+    <key>CFBundleExecutable</key><string>CameraLive</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleShortVersionString</key><string>2.0.0</string>
+    <key>CFBundleVersion</key><string>1</string>
+    <key>CFBundleIconFile</key><string>CameraLive</string>
+    <key>LSMinimumSystemVersion</key><string>13.0</string>
+    <key>NSHighResolutionCapable</key><true/>
+    <key>NSCameraUsageDescription</key><string>Camera Live uses your connected USB camera to share its live view with Syphon-compatible apps.</string>
+    <key>NSPrincipalClass</key><string>NSApplication</string>
+</dict></plist>

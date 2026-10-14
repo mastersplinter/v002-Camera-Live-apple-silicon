@@ -1,94 +1,20 @@
+# Camera support
 
+The primary target for this rewrite is the **Canon EOS 550D**, also sold as the **EOS Rebel T2i / EOS Kiss X4**.
 
+The pinned libgphoto2 2.5.34 PTP2 driver lists the 550D's USB vendor/product IDs (`04a9:31ea`) with preview capture capability. The [upstream supported-camera list](https://gphoto.github.io/proj/libgphoto2/support/) and [remote-control documentation](https://gphoto.sourceforge.io/doc/remote/) list its live-view support. This is driver support evidence, not a claim that this rewrite has passed a physical 550D test.
 
-The following cameras are currently supported, as of Camera Live Build 10:
+The application includes libgphoto2's PTP2 driver and libusb-1.0 transport. Other Canon, Nikon, Sony and similar PTP cameras may work when that driver advertises live-view capture. No blanket compatibility guarantee is made for all cameras in the original EDSDK camera list. Opening a camera without preview capability returns an actionable error.
 
-    EOS 1000D
-    EOS 100D
-    EOS 1100D
-    EOS 1200D
-    EOS 1300D
-    EOS 1500D
-    EOS-1D C
-    EOS-1D Mark III
-    EOS-1D Mark IV
-    EOS-1Ds Mark III
-    EOS-1D X
-    EOS-1D X Mark II
-    EOS 2000D
-    EOS 200D
-    EOS 200D II
-    EOS 250D
-    EOS 3000D
-    EOS 4000D
-    EOS 40D
-    EOS 450D
-    EOS 500D
-    EOS 50D
-    EOS 550D
-    EOS 5D Mark II
-    EOS 5D Mark III
-    EOS 5D Mark IV
-    EOS 5DS
-    EOS 5DS R
-    EOS 600D
-    EOS 60D
-    EOS 650D
-    EOS 6D
-    EOS 6D Mark II
-    EOS 700D
-    EOS 70D
-    EOS 750D
-    EOS 760D
-    EOS 77D
-    EOS 7D
-    EOS 7D Mark II
-    EOS 8000D
-    EOS 800D
-    EOS 80D
-    EOS 9000D
-    EOS 90D
-    EOS DIGITAL REBEL XS
-    EOS DIGITAL REBEL Xsi
-    EOS Hi
-    EOS KISS F
-    EOS Kiss M
-    EOS Kiss X10
-    EOS Kiss X2
-    EOS Kiss X3
-    EOS Kiss X4
-    EOS Kiss X5
-    EOS Kiss X50
-    EOS Kiss X6i
-    EOS Kiss X7
-    EOS Kiss X70
-    EOS Kiss X7i
-    EOS Kiss X80
-    EOS Kiss X8i
-    EOS Kiss X9
-    EOS Kiss X90
-    EOS Kiss X9i
-    EOS M200
-    EOS M50
-    EOS M6 Mark II
-    EOS R
-    EOS REBEL SL1
-    EOS Rebel SL2
-    EOS Rebel SL3
-    EOS REBEL T100
-    EOS REBEL T1i
-    EOS REBEL T2i
-    EOS REBEL T3
-    EOS REBEL T3i
-    EOS REBEL T4i
-    EOS REBEL T5
-    EOS REBEL T5i
-    EOS Rebel T6
-    EOS REBEL T6i
-    EOS REBEL T6s
-    EOS REBEL T7
-    EOS Rebel T7i
-    EOS RP
-    PowerShot G5X Mark II
-    PowerShot G7X Mark III
-    PowerShot SX70 HS
+USB live-view JPEG dimensions, frame rate, autofocus behaviour and camera mode requirements vary by camera. The camera controls exposure, focus and image dimensions; the app does not change exposure settings, take stills, save or delete camera files, or record movies.
+
+Connection problems:
+
+- Close EOS Utility and all other software that may claim the camera.
+- Use a USB data cable, not HDMI or a charge-only cable.
+- Turn the camera off and on, then reconnect if a previous app left its session locked.
+- If no live-view images arrive, enable Live View in the camera's settings and try a normal still-photo mode.
+- The app reports USB claim/busy errors instead of killing macOS camera services or other applications.
+- In ambiguous reconnections involving two identical cameras, select the desired camera manually.
+
+See [VALIDATION.md](VALIDATION.md) for the physical-camera acceptance checklist and the current validation record.

@@ -1,3 +1,8 @@
 .DS_Store
 xcuserdata
 libturbojpeg.0.dylib
+.build/
+.swiftpm/
+.dependencies/
+dist/
+__pycache__/

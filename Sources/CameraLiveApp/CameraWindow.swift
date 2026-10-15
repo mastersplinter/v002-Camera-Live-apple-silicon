@@ -10,6 +10,24 @@ struct CameraWindow: View {
     @ViewState private var columns: NavigationSplitViewVisibility
     @ViewState private var showingInspector = false
     @ViewState private var inspectorPage = InspectorPage.stream
+    @ViewState private var windowSize = CGSize(width: 1080, height: 720)
+    @ViewState private var compactPanel: CompactPanel?
+
+    private enum CompactPanel: Equatable {
+        case cameras, inspector
+    }
+
+    private var compact: Bool { windowSize.width < 700 || windowSize.height < 400 }
+    private var hasNotices: Bool {
+        if case .failed = controller.state { return true }
+        return virtualCamera.state.needsAttention
+    }
+    private func presenting(_ panel: CompactPanel) -> Binding<Bool> {
+        Binding(get: { compact && compactPanel == panel }, set: { presented in
+            if presented { compactPanel = panel }
+            else if compactPanel == panel { compactPanel = nil }
+        })
+    }
 
     init(controller: CameraController, virtualCamera: VirtualCameraController) {
         self.controller = controller
@@ -32,25 +50,72 @@ struct CameraWindow: View {
     }
 
     var body: some View {
-        splitView
-            .inspector(isPresented: $showingInspector) {
-                inspector.inspectorColumnWidth(min: 280, ideal: 310, max: 360)
+        // Let the window's explicit minimum govern resizing, rather than the
+        // combined ideal sizes of the sidebar, preview and inspector.
+        GeometryReader { geometry in
+            Group {
+                if compact {
+                    previewContent
+                } else {
+                    splitView
+                        .inspector(isPresented: $showingInspector) {
+                            inspector.inspectorColumnWidth(min: 280, ideal: 310, max: 360)
+                        }
+                }
             }
-            .toolbar { windowToolbar }
-            // The native glass controls provide their own backgrounds. Keep
-            // the full-width toolbar backdrop out of the video surface.
-            .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+            .frame(width: geometry.size.width, height: geometry.size.height)
+            .onGeometryChange(for: CGSize.self) { $0.size } action: { windowSize = $0 }
+        }
+        .navigationTitle("Camera Live")
+        .toolbar { windowToolbar }
+        // The native glass controls provide their own backgrounds. Keep
+        // the full-width toolbar backdrop out of the video surface.
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        .onChange(of: compact) {
+            // An open column must not pin the window at its old size.
+            showingInspector = false
+            compactPanel = nil
+        }
+        .onChange(of: controller.selectedDevice?.id) {
+            if compactPanel == .cameras { compactPanel = nil }
+        }
     }
 
     @ToolbarContentBuilder private var windowToolbar: some ToolbarContent {
+        if compact {
+            ToolbarItem(placement: .navigation) {
+                Button { compactPanel = .cameras } label: { Label("Cameras", systemImage: "sidebar.left") }
+                    .help("Choose a camera")
+                    .keyboardShortcut("s", modifiers: [.command, .control])
+                    .popover(isPresented: presenting(.cameras), arrowEdge: .bottom) {
+                        VStack(spacing: 0) {
+                            HStack {
+                                Text("Cameras").font(.headline)
+                                Spacer()
+                                Button { compactPanel = nil } label: { Image(systemName: "xmark") }
+                                    .buttonStyle(.borderless).accessibilityLabel("Close cameras")
+                            }.padding(16)
+                            Divider()
+                            cameraSidebar
+                        }.frame(width: 300, height: 320)
+                    }
+            }
+        }
         ToolbarItem(placement: .automatic) {
             Button { toggleInspector() } label: { Label("Stream Details", systemImage: "sidebar.right") }
                 .help("Stream details (⇧⌘I)")
-                .accessibilityValue(showingInspector ? "Shown" : "Hidden")
+                .accessibilityValue(showingInspector || compactPanel == .inspector ? "Shown" : "Hidden")
                 .keyboardShortcut("i", modifiers: [.command, .shift])
+                .popover(isPresented: presenting(.inspector), arrowEdge: .bottom) {
+                    inspector.frame(width: 360, height: 480)
+                }
         }
         ToolbarItem(placement: .primaryAction) {
-            virtualCameraButton
+            if windowSize.width < 600 {
+                virtualCameraButton.labelStyle(.iconOnly)
+            } else {
+                virtualCameraButton.labelStyle(.titleAndIcon)
+            }
         }
     }
 
@@ -59,13 +124,23 @@ struct CameraWindow: View {
             cameraSidebar
                 .navigationSplitViewColumnWidth(min: 210, ideal: 240, max: 300)
         } detail: {
-            VStack(spacing: 0) {
-                notices
-                preview
-            }
-            .navigationTitle("Camera Live")
+            previewContent
+                .navigationTitle("Camera Live")
         }
         .navigationSplitViewStyle(.balanced)
+    }
+
+    private var previewContent: some View {
+        VStack(spacing: 0) {
+            if compact && hasNotices {
+                ScrollView { notices }
+                    .frame(height: min(100, windowSize.height * 0.4))
+            } else {
+                notices
+            }
+            preview.frame(minWidth: 0, minHeight: 0)
+        }
+        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
     }
 
     private var cameraSidebar: some View {
@@ -98,13 +173,6 @@ struct CameraWindow: View {
                         .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
                 }
             }
-            Section("Sharing") {
-                VStack(alignment: .leading, spacing: 8) {
-                    OutputStatus(state: virtualCamera.state)
-                    Text("In Zoom and other video apps, choose Camera Live.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }.padding(.vertical, 4)
-            }
         }
         .listStyle(.sidebar)
         .navigationTitle("Cameras")
@@ -115,14 +183,12 @@ struct CameraWindow: View {
             Button { virtualCamera.stop() } label: {
                 Label("Stop Virtual Camera", systemImage: "video.slash")
             }
-            .labelStyle(.titleAndIcon)
             .keyboardShortcut("v", modifiers: [.command, .shift])
             .help("Stop sending video to Zoom and other video apps (⇧⌘V)")
         } else {
             Button { virtualCamera.start() } label: {
                 Label(virtualCamera.installed ? "Start Virtual Camera" : "Enable Virtual Camera", systemImage: "video")
             }
-            .labelStyle(.titleAndIcon)
             .buttonStyle(.glassProminent)
             .keyboardShortcut("v", modifiers: [.command, .shift])
             .disabled(virtualCamera.busy)
@@ -158,7 +224,10 @@ struct CameraWindow: View {
                     .accessibilityLabel("Live camera preview")
                     .accessibilityValue("\(virtualCamera.framing.canvas.title), framed for the virtual camera")
             } else {
-                emptyPreview
+                ViewThatFits(in: .vertical) {
+                    emptyPreview
+                    compactEmptyPreview
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -176,22 +245,47 @@ struct CameraWindow: View {
             Text(emptyTitle).font(.title2.weight(.medium))
             Text(emptyMessage).font(.callout).foregroundStyle(.white.opacity(0.75))
                 .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
-            if case .failed = controller.state {
-                Button("Try Again") { controller.retry() }.buttonStyle(.borderedProminent)
-            } else if controller.state == .idle {
-                if controller.devices.count == 1, let camera = controller.devices.first {
-                    Button("Start Camera") { controller.select(camera) }.buttonStyle(.borderedProminent)
-                } else if !controller.devices.isEmpty {
-                    Button("Choose Camera") { columns = .all }.buttonStyle(.borderedProminent)
-                } else {
-                    Button("Refresh Cameras") { controller.refresh() }.buttonStyle(.borderedProminent)
-                }
-            }
+            emptyPreviewAction
         }
         .foregroundStyle(.white)
         .padding(28)
         .frame(maxWidth: 380)
         .environment(\.colorScheme, .dark)
+    }
+
+    private var compactEmptyPreview: some View {
+        VStack(spacing: 8) {
+            if controller.state == .starting || controller.state == .stopping {
+                ProgressView().controlSize(.small)
+            } else {
+                Image(systemName: emptySymbol).font(.system(size: 24, weight: .light))
+                    .accessibilityHidden(true)
+            }
+            Text(emptyTitle).font(.headline).multilineTextAlignment(.center)
+            emptyPreviewAction
+        }
+        .foregroundStyle(.white).padding(12)
+        .help(emptyMessage)
+        .environment(\.colorScheme, .dark)
+    }
+
+    @ViewBuilder private var emptyPreviewAction: some View {
+        if case .failed = controller.state {
+            Button("Try Again") { controller.retry() }.buttonStyle(.borderedProminent)
+        } else if controller.state == .idle {
+            if controller.devices.count == 1, let camera = controller.devices.first {
+                Button("Start Camera") { controller.select(camera) }.buttonStyle(.borderedProminent)
+            } else if !controller.devices.isEmpty {
+                Button("Choose Camera") { chooseCamera() }.buttonStyle(.borderedProminent)
+            } else {
+                Button("Refresh Cameras") { controller.refresh() }.buttonStyle(.borderedProminent)
+            }
+        }
+    }
+
+    private func chooseCamera() {
+        if compact { compactPanel = .cameras }
+        else { columns = .all }
     }
 
     private var emptySymbol: String {
@@ -228,7 +322,7 @@ struct CameraWindow: View {
                 Picker("Inspector", selection: $inspectorPage) {
                     ForEach(InspectorPage.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                 }.pickerStyle(.segmented).labelsHidden()
-                Button { showingInspector = false } label: { Image(systemName: "xmark") }
+                Button { showingInspector = false; compactPanel = nil } label: { Image(systemName: "xmark") }
                     .buttonStyle(.borderless).help("Close inspector")
                     .accessibilityLabel("Close inspector")
             }.padding(16)
@@ -256,7 +350,7 @@ struct CameraWindow: View {
                 } else if controller.devices.count == 1, let camera = controller.devices.first {
                     Button("Start Camera") { controller.select(camera) }
                 } else {
-                    Button("Choose Camera") { columns = .all }
+                    Button("Choose Camera") { chooseCamera() }
                 }
             }
             Section {
@@ -276,7 +370,10 @@ struct CameraWindow: View {
     }
 
     private func toggleInspector() {
-        if showingInspector { showingInspector = false }
+        if compact {
+            if compactPanel == .inspector { compactPanel = nil }
+            else { inspectorPage = .stream; compactPanel = .inspector }
+        } else if showingInspector { showingInspector = false }
         else { inspectorPage = .stream; showingInspector = true }
     }
 }

@@ -1,5 +1,32 @@
 # Validation
 
+## Release 2.4.1, 15 October 2026
+
+Version 2.4.1/build 14 packages the Cameras panel cleanup and compact-window interface tested in builds 12 and 13 below. The application changes from build 13 are release version/build metadata only; the user accepted the delivered update and requested publication.
+
+- All 31 Swift tests across eight suites and all seven signing-configuration tests passed for this release. The compact interface was exercised in 16 native layout states as described below.
+- The signed arm64 release passed architecture/dependency and platform-version audits and deep/strict signature verification. Apple accepted notarization `b074c71e-97a4-48f0-a495-2f7a1a742bf0`; its ticket was stapled and validated, and Gatekeeper accepted the app.
+- The extracted `dist/releases/2.4.1/Camera-Live-2.4.1-arm64.zip` passed signature, notarization-ticket and Gatekeeper checks and matches the signed build's executables and resource signature. SHA-256: `11bf32b265d317f8c74fbd73ad1575fcdaff91617af8ddd8d87aaa1f738cc169`.
+- The bundled camera extension remains 2.4.0/build 10 with unchanged CodeDirectory hash `b0d31a735387c7211d5655f2a3874cdafc875d1d`. Fresh live Canon/Zoom output was not independently retested for these interface-only changes.
+
+## Compact window resizing, 15 October 2026
+
+Version 2.4.0/build 13 reduces the minimum content size from 760 × 480 to 400 × 240 points (400 × 292 including the native toolbar on this Mac). Below 700 points wide or 400 points tall, the preview uses the window and Cameras/Stream/Framing open in native toolbar popovers. Narrow windows use an icon-only virtual-camera button; short empty states and scrollable notices keep their actions reachable. Returning to a larger window restores the native split layout.
+
+- An isolated native SwiftUI review app compiled the current view sources with simulated camera/output controllers and exercised 16 layout states: normal and minimum size, Stream and Framing popovers, switching to Cameras, empty preview and error notice, short/wide and narrow/tall windows, the regular-layout boundary with both panels open, and shrinking with panels open. The minimum remained 400 × 292 and opening compact popovers did not enlarge the main window. An initial sheet-based approach enlarged the window and was replaced before installation.
+- The actual Metal preview view submitted the synthetic image at normal and minimum sizes; the minimum-size drawable was 400 × 225 with the correct 16:9 ratio. Review output is in `.build/resize-review/results.txt`. These are local layout/rendering checks, not a fresh Canon/Zoom or screenshot-based visual acceptance check.
+- The signed native release passed architecture/dependency and platform-version audits and deep/strict signature verification. Apple accepted notarization `4a46a298-53ab-41fa-973d-10c5ef77b3f6`; the ticket was stapled and validated, and the installed app passed Gatekeeper assessment.
+- Installed and reopened `/Applications/Camera Live Apple Silicon.app`, retaining build 12 under `.build/installed-backup-2.4.0-build12`. The extension remains build 10 with unchanged CodeDirectory hash `b0d31a735387c7211d5655f2a3874cdafc875d1d`. The published 2.4.0 release remains build 11.
+
+## Cameras panel cleanup, 15 October 2026
+
+Version 2.4.0/build 12 removes the Sharing section, virtual-camera status and Zoom guidance from the Cameras sidebar. Camera selection and refresh actions, and the Stream inspector, are unchanged.
+
+- The native release build, architecture/dependency and platform-version audits, and deep/strict signature verification passed. This view-only removal did not require new tests or a full camera regression run.
+- Apple accepted notarization `0e8b8650-f0e9-48b6-bc68-9e586c263b25`. The ticket was stapled and validated, and the installed app passed Gatekeeper assessment.
+- Installed and reopened `/Applications/Camera Live Apple Silicon.app`, retaining build 11 under `.build/installed-backup-2.4.0-build11`. The camera extension remains build 10 with unchanged CodeDirectory hash `b0d31a735387c7211d5655f2a3874cdafc875d1d`.
+- On-screen appearance and fresh live-camera/Zoom output were not independently checked for this sidebar-only update. The published 2.4.0 release remains build 11.
+
 ## macOS 26 interface refinements, 15 October 2026
 
 Version 2.4.0/build 10 requires macOS 26 for both the host and camera extension. The older split-pane inspector fallback is removed. The interface uses the system title bar and window buttons, automatic toolbar styling, a native Liquid Glass primary action, and a Stream-first inspector that resets to Stream when reopened. The crop toolbar button, bottom status bar and requested explanatory text are removed.

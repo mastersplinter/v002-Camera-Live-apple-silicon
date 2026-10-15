@@ -2,6 +2,8 @@
 
 A native arm64 rewrite of v002 Camera Live. It turns a USB DSLR's live view into a **Syphon Metal video feed**, with an optional **Camera Live virtual camera** for Zoom and other video apps. The target camera is the **Canon EOS 550D / Rebel T2i / Kiss X4**. The virtual-camera implementation requires Apple signing, notarization and macOS activation before use; see [setup and validation](VIRTUAL_CAMERA.md).
 
+The signed, notarized [2.1.1 release](https://github.com/mastersplinter/v002-Camera-Live-apple-silicon/releases/tag/v2.1.1) has been tested with live Canon EOS 550D video in Zoom. It fixes the virtual-camera input and sender-verification failures in 2.1.0. After updating and enabling the extension, if the app stays on “Waiting for macOS…”, quit and reopen Camera Live, then start the camera and virtual camera again. Reopen Zoom if its camera list has not refreshed.
+
 The app and reusable `CameraLiveCore` Swift library replace the original Objective-C application, Canon EDSDK integration, Intel libjpeg-turbo dependency, and OpenGL video pipeline. Camera access uses a locally built arm64 libgphoto2; JPEG decoding uses ImageIO; Core Image and Metal render into shared IOSurface-backed textures for Syphon. Rosetta and Homebrew are not required to run the built app.
 
 ## Requirements

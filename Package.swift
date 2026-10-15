@@ -28,7 +28,7 @@ let package = Package(
         .target(name: "CameraLiveVirtualCamera", dependencies: ["CameraLiveCore", "VirtualCameraShared"],
                 linkerSettings: [.linkedFramework("CoreMediaIO"), .linkedFramework("SystemExtensions")]),
         .executableTarget(name: "CameraLiveCameraExtension", dependencies: ["VirtualCameraShared"],
-                linkerSettings: [.linkedFramework("CoreMediaIO")]),
+                linkerSettings: [.linkedFramework("CoreMediaIO"), .linkedFramework("Security")]),
         .executableTarget(name: "CameraLiveApp", dependencies: ["CameraLiveCore", "CameraLiveVirtualCamera"]),
         .executableTarget(name: "CameraLiveDiagnostics", dependencies: ["CameraLiveCore", "CameraLiveNative", "CameraLiveVirtualCamera", "VirtualCameraShared"]),
         .testTarget(name: "CameraLiveCoreTests", dependencies: ["CameraLiveCore", "CameraLiveNative", "CameraLiveVirtualCamera", "VirtualCameraShared"])

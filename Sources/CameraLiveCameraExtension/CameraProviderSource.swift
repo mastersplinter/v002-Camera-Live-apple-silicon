@@ -1,5 +1,7 @@
 import CoreMediaIO
 import Foundation
+import OSLog
+import Security
 import VirtualCameraShared
 
 final class CameraProviderSource: NSObject, CMIOExtensionProviderSource {
@@ -37,6 +39,9 @@ final class CameraDeviceSource: NSObject, CMIOExtensionDeviceSource {
     private var consuming = false
     private var generation = 0
     private var wasLive = false
+    private let senderVerifier = CameraSenderVerifier()
+    private let logger = Logger(subsystem: VirtualCameraFormat.extensionIdentifier, category: "Sender")
+    private var reportedClients: Set<UUID> = []
 
     init(queue: DispatchQueue) throws {
         self.queue = queue
@@ -61,8 +66,12 @@ final class CameraDeviceSource: NSObject, CMIOExtensionDeviceSource {
 
     func authorize(_ client: CMIOExtensionClient, direction: CMIOExtensionStream.Direction) -> Bool {
         guard direction == .sink else { return true } // macOS enforces camera consent for viewers.
-        guard [VirtualCameraFormat.appIdentifier, VirtualCameraFormat.diagnosticsIdentifier].contains(client.signingID ?? ""),
-              producer == nil || producer?.clientID == client.clientID else { return false }
+        let signatureStatus = senderVerifier.status(for: client.pid)
+        let available = producer == nil || producer?.clientID == client.clientID
+        if reportedClients.insert(client.clientID).inserted {
+            logger.notice("Sender pid=\(client.pid) reportedSigningID=\(client.signingID ?? "missing", privacy: .public) signatureStatus=\(signatureStatus) available=\(available)")
+        }
+        guard signatureStatus == errSecSuccess, available else { return false }
         authorizedProducer = client
         return true
     }
@@ -93,6 +102,7 @@ final class CameraDeviceSource: NSObject, CMIOExtensionDeviceSource {
     }
 
     func disconnect(_ client: CMIOExtensionClient) {
+        reportedClients.remove(client.clientID)
         if producer?.clientID == client.clientID { stop(.sink) }
         if authorizedProducer?.clientID == client.clientID { authorizedProducer = nil }
     }

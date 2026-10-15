@@ -42,12 +42,27 @@ final class CMIOVirtualCameraTransport: VirtualCameraTransport {
         guard let device = Self.deviceID(), let stream = Self.ids(device, selector: UInt32(kCMIODevicePropertyStreams),
             scope: UInt32(kCMIODevicePropertyScopeOutput)).first else { throw VirtualCameraError.notInstalled }
         var queue: Unmanaged<CMSimpleQueue>?
-        let queueStatus = CMIOStreamCopyBufferQueue(stream, nil, nil, &queue)
-        guard queueStatus == noErr, let queue else { throw VirtualCameraError.operation("Open virtual-camera input", queueStatus) }
+        // A nil callback unregisters the client and can return success with no
+        // queue. Register a callback even though the publisher polls capacity.
+        let queueStatus = CMIOStreamCopyBufferQueue(stream, { _, _, _ in }, nil, &queue)
+        guard queueStatus == noErr else { throw VirtualCameraError.operation("Open virtual-camera input", queueStatus) }
+        guard let queue else {
+            Self.removeQueueCallback(stream)
+            throw NSError(domain: "info.v002.CameraLive.VirtualCamera", code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "macOS did not provide an input queue for the virtual camera."])
+        }
         let buffers = queue.takeRetainedValue()
         let status = CMIODeviceStartStream(device, stream)
-        guard status == noErr else { throw VirtualCameraError.operation("Start virtual camera", status) }
+        guard status == noErr else {
+            Self.removeQueueCallback(stream)
+            throw VirtualCameraError.operation("Start virtual camera", status)
+        }
         self.device = device; self.stream = stream; self.buffers = buffers
+    }
+    private static func removeQueueCallback(_ stream: CMIOStreamID) {
+        var unused: Unmanaged<CMSimpleQueue>?
+        _ = CMIOStreamCopyBufferQueue(stream, nil, nil, &unused)
+        unused?.release()
     }
     func enqueue(_ sample: CMSampleBuffer) -> Bool {
         guard let buffers, CMSimpleQueueGetCount(buffers) < CMSimpleQueueGetCapacity(buffers) else { return false }
@@ -57,7 +72,10 @@ final class CMIOVirtualCameraTransport: VirtualCameraTransport {
         return result == noErr
     }
     func stop() {
-        if device != 0, stream != 0 { _ = CMIODeviceStopStream(device, stream) }
+        if device != 0, stream != 0 {
+            _ = CMIODeviceStopStream(device, stream)
+            Self.removeQueueCallback(stream)
+        }
         // StopStream synchronizes the stream before any remaining owned samples
         // are drained. Do not reuse old queues after restart or removal.
         if let buffers {

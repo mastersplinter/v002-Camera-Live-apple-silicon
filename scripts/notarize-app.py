@@ -23,9 +23,20 @@ def main():
     if archive.exists(): archive.unlink()
     subprocess.run(['ditto', '-c', '-k', '--keepParent', str(APP), str(archive)], check=True)
     print('Submitting the signed Camera Live app to Apple for notarization…', flush=True)
-    result = subprocess.run(['xcrun', 'notarytool', 'submit', str(archive), '--keychain-profile', args.keychain_profile,
-                             '--wait', '--output-format', 'json'], capture_output=True, text=True, check=True)
+    # Confirm the upload and persist its ID before waiting. A connection failure
+    # during submit --wait otherwise hides whether the archive reached Apple.
+    uploaded = subprocess.run(['xcrun', 'notarytool', 'submit', str(archive), '--keychain-profile', args.keychain_profile,
+                               '--no-wait', '--output-format', 'json'], capture_output=True, text=True)
+    (directory / 'submission.json').write_text(uploaded.stdout)
+    if uploaded.returncode:
+        raise SystemExit(f'Notarization upload failed: {uploaded.stderr.strip()}')
+    submission_id = json.loads(uploaded.stdout)['id']
+    print(f'Upload confirmed; waiting for Apple submission {submission_id}…', flush=True)
+    result = subprocess.run(['xcrun', 'notarytool', 'wait', submission_id, '--keychain-profile', args.keychain_profile,
+                             '--output-format', 'json'], capture_output=True, text=True)
     (directory / 'result.json').write_text(result.stdout)
+    if result.returncode:
+        raise SystemExit(f'Waiting for submission {submission_id} failed: {result.stderr.strip()}')
     reply = json.loads(result.stdout)
     if reply.get('status') != 'Accepted':
         if reply.get('id'):

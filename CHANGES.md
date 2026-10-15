@@ -1,3 +1,11 @@
+## 2.1.1 Virtual camera connection correction
+
+- Register the input queue callback required by Core Media I/O, fixing “Open virtual-camera input failed (0)” after extension approval. Unregister it when stopping or when stream startup fails.
+- Check the bundled extension on the first start after launching the signed app, so an enabled older extension can be replaced by an update.
+- Defer video-device discovery until extension activation finishes, avoiding a connection to the retired extension during an update.
+- Authenticate video senders using their running code signature, the extension's signing team, and the two allowed app identifiers, without depending on CMIO's optional signing-ID field. Log the decision once per connection with readable diagnostic fields.
+- Validate sender signatures from the running process, so the camera extension does not need filesystem access to the host app.
+
 ## 2.1.0 Virtual camera integration (activation testing pending)
 
 - Compile the app icon with Apple's icon utility and share it with the camera extension for consistent System Settings artwork.

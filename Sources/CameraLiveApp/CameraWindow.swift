@@ -18,6 +18,7 @@ struct CameraWindow: View {
     }
 
     private var compact: Bool { windowSize.width < 700 || windowSize.height < 400 }
+    private var narrow: Bool { windowSize.width < 320 }
     private var hasNotices: Bool {
         if case .failed = controller.state { return true }
         return virtualCamera.state.needsAttention
@@ -36,8 +37,12 @@ struct CameraWindow: View {
         _columns = ViewState(initialValue: controller.selectedDevice == nil ? .all : .detailOnly)
     }
 
-    private enum InspectorPage: String, CaseIterable {
-        case stream = "Stream", framing = "Framing"
+    private enum InspectorPage: String {
+        case stream = "Stream", framing = "Framing", cameras = "Cameras"
+    }
+
+    private var inspectorPages: [InspectorPage] {
+        narrow ? [.stream, .framing, .cameras] : [.stream, .framing]
     }
 
     private var selectedID: Binding<String?> {
@@ -67,6 +72,9 @@ struct CameraWindow: View {
             .onGeometryChange(for: CGSize.self) { $0.size } action: { windowSize = $0 }
         }
         .navigationTitle("Camera Live")
+        // Leave room for the controls in narrow windows. Otherwise
+        // AppKit competes with the title for space and overflows the action.
+        .toolbar(removing: windowSize.width < 600 ? .title : nil)
         .toolbar { windowToolbar }
         // The native glass controls provide their own backgrounds. Keep
         // the full-width toolbar backdrop out of the video surface.
@@ -76,14 +84,21 @@ struct CameraWindow: View {
             showingInspector = false
             compactPanel = nil
         }
+        .onChange(of: narrow) {
+            // Close a popover before its toolbar anchor or tabs change.
+            compactPanel = nil
+            if !narrow, inspectorPage == .cameras { inspectorPage = .stream }
+        }
         .onChange(of: controller.selectedDevice?.id) {
-            if compactPanel == .cameras { compactPanel = nil }
+            if compactPanel == .cameras || (compactPanel == .inspector && inspectorPage == .cameras) {
+                compactPanel = nil
+            }
         }
     }
 
     @ToolbarContentBuilder private var windowToolbar: some ToolbarContent {
-        if compact {
-            ToolbarItem(placement: .navigation) {
+        if compact && !narrow {
+            ToolbarItem(id: "cameras", placement: .navigation) {
                 Button { compactPanel = .cameras } label: { Label("Cameras", systemImage: "sidebar.left") }
                     .help("Choose a camera")
                     .keyboardShortcut("s", modifiers: [.command, .control])
@@ -101,22 +116,24 @@ struct CameraWindow: View {
                     }
             }
         }
-        ToolbarItem(placement: .automatic) {
-            Button { toggleInspector() } label: { Label("Stream Details", systemImage: "sidebar.right") }
-                .help("Stream details (⇧⌘I)")
+        ToolbarItem(id: "stream-details", placement: .automatic) {
+            Button { toggleInspector() } label: {
+                Label(narrow ? "Camera and Stream Controls" : "Stream Details",
+                      systemImage: narrow ? "slider.horizontal.3" : "sidebar.right")
+            }
+                .help(narrow ? "Camera and stream controls (⇧⌘I)" : "Stream details (⇧⌘I)")
                 .accessibilityValue(showingInspector || compactPanel == .inspector ? "Shown" : "Hidden")
                 .keyboardShortcut("i", modifiers: [.command, .shift])
                 .popover(isPresented: presenting(.inspector), arrowEdge: .bottom) {
                     inspector.frame(width: 360, height: 480)
                 }
         }
-        ToolbarItem(placement: .primaryAction) {
-            if windowSize.width < 600 {
-                virtualCameraButton.labelStyle(.iconOnly)
-            } else {
-                virtualCameraButton.labelStyle(.titleAndIcon)
-            }
+        ToolbarItem(id: "virtual-camera", placement: .primaryAction) {
+            VirtualCameraToolbarButton(controller: virtualCamera, iconOnly: windowSize.width < 600)
         }
+        // The compact control draws its own standard button bezel. Avoid a
+        // second, animated glass surface around it in the native toolbar.
+        .sharedBackgroundVisibility(windowSize.width < 600 ? .hidden : .automatic)
     }
 
     private var splitView: some View {
@@ -178,24 +195,6 @@ struct CameraWindow: View {
         .navigationTitle("Cameras")
     }
 
-    @ViewBuilder private var virtualCameraButton: some View {
-        if virtualCamera.enabled {
-            Button { virtualCamera.stop() } label: {
-                Label("Stop Virtual Camera", systemImage: "video.slash")
-            }
-            .keyboardShortcut("v", modifiers: [.command, .shift])
-            .help("Stop sending video to Zoom and other video apps (⇧⌘V)")
-        } else {
-            Button { virtualCamera.start() } label: {
-                Label(virtualCamera.installed ? "Start Virtual Camera" : "Enable Virtual Camera", systemImage: "video")
-            }
-            .buttonStyle(.glassProminent)
-            .keyboardShortcut("v", modifiers: [.command, .shift])
-            .disabled(virtualCamera.busy)
-            .help("Make Camera Live available in Zoom and other video apps (⇧⌘V)")
-        }
-    }
-
     @ViewBuilder private var notices: some View {
         if case let .failed(message) = controller.state {
             CameraNotice(title: "Couldn’t start the camera", message: message, symbol: "exclamationmark.triangle") {
@@ -227,6 +226,11 @@ struct CameraWindow: View {
                 ViewThatFits(in: .vertical) {
                     emptyPreview
                     compactEmptyPreview
+                    // Notices can leave very little height in a miniature
+                    // window; keep setup and retry actions reachable.
+                    ScrollView {
+                        compactEmptyPreview.frame(maxWidth: .infinity)
+                    }
                 }
             }
         }
@@ -284,7 +288,8 @@ struct CameraWindow: View {
     }
 
     private func chooseCamera() {
-        if compact { compactPanel = .cameras }
+        if narrow { inspectorPage = .cameras; compactPanel = .inspector }
+        else if compact { compactPanel = .cameras }
         else { columns = .all }
     }
 
@@ -318,19 +323,17 @@ struct CameraWindow: View {
 
     private var inspector: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Picker("Inspector", selection: $inspectorPage) {
-                    ForEach(InspectorPage.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                }.pickerStyle(.segmented).labelsHidden()
-                Button { showingInspector = false; compactPanel = nil } label: { Image(systemName: "xmark") }
-                    .buttonStyle(.borderless).help("Close inspector")
-                    .accessibilityLabel("Close inspector")
-            }.padding(16)
+            Picker("Inspector", selection: $inspectorPage) {
+                ForEach(inspectorPages, id: \.self) { Text($0.rawValue).tag($0) }
+            }.pickerStyle(.segmented).labelsHidden().padding(16)
             Divider()
-            if inspectorPage == .framing {
+            switch inspectorPage {
+            case .framing:
                 VideoFramingControls(controller: virtualCamera)
-            } else {
+            case .stream:
                 streamDetails
+            case .cameras:
+                cameraSidebar
             }
         }
     }
@@ -375,6 +378,65 @@ struct CameraWindow: View {
             else { inspectorPage = .stream; compactPanel = .inspector }
         } else if showingInspector { showingInspector = false }
         else { inspectorPage = .stream; showingInspector = true }
+    }
+}
+
+// Keep the toolbar control independent of the camera's frequent statistics
+// updates. Constrain the icon label before AppKit measures the button so its
+// hidden title cannot change the compact toolbar's layout.
+private struct VirtualCameraToolbarButton: View {
+    @ObservedObject var controller: VirtualCameraController
+    let iconOnly: Bool
+
+    private var title: String {
+        controller.enabled ? "Stop Virtual Camera" : controller.installed ? "Start Virtual Camera" : "Enable Virtual Camera"
+    }
+
+    @ViewBuilder private var label: some View {
+        if iconOnly {
+            Label(title, systemImage: controller.enabled ? "video.slash" : "video")
+                .labelStyle(.iconOnly)
+                .frame(width: 20, height: 20)
+        } else {
+            Label(title, systemImage: controller.enabled ? "video.slash" : "video")
+                .labelStyle(.titleAndIcon)
+                .fixedSize()
+        }
+    }
+
+    var body: some View {
+        Group {
+            if iconOnly {
+                // Keep one button and one style for both Start and Stop. A
+                // stable bezel avoids glass morphing over the moving preview.
+                Button {
+                    if controller.enabled { controller.stop() }
+                    else { controller.start() }
+                } label: { label }
+                    .buttonStyle(.bordered)
+                    .tint(controller.enabled ? Color.secondary : Color.accentColor)
+                    .disabled(!controller.enabled && controller.busy)
+                    .frame(width: 56, height: 40)
+                    .help(controller.enabled
+                          ? "Stop sending video to Zoom and other video apps (⇧⌘V)"
+                          : "Make Camera Live available in Zoom and other video apps (⇧⌘V)")
+                    .transaction { transaction in
+                        transaction.animation = nil
+                        transaction.disablesAnimations = true
+                    }
+            } else if controller.enabled {
+                Button { controller.stop() } label: { label }
+                    .help("Stop sending video to Zoom and other video apps (⇧⌘V)")
+            } else {
+                Button { controller.start() } label: { label }
+                    .buttonStyle(.glassProminent)
+                    .disabled(controller.busy)
+                    .help("Make Camera Live available in Zoom and other video apps (⇧⌘V)")
+            }
+        }
+        .fixedSize()
+        .accessibilityLabel(title)
+        .keyboardShortcut("v", modifiers: [.command, .shift])
     }
 }
 

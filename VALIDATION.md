@@ -1,5 +1,44 @@
 # Validation
 
+## Release 2.4.2, 15 October 2026
+
+Version 2.4.2/build 18 packages the smaller minimum window, combined controls popover, inspector cleanup and compact virtual-camera button accepted by the user in build 17. The executable source is unchanged from the accepted installation; only release version/build metadata changed. The camera extension remains 2.4.0/build 10.
+
+- All 31 Swift tests across eight suites and all seven signing-configuration tests passed for this release. Native interface checks covered 21 layout scenarios and 12 extended toolbar cases, described below; the user accepted the delivered interface.
+- The signed arm64 release passed architecture/dependency and platform-version audits and deep/strict signature verification. Apple accepted notarization `10e69120-1858-4237-8ae3-529a821da480`; its ticket was stapled and validated, and Gatekeeper accepted the app.
+- The extracted `dist/releases/2.4.2/Camera-Live-2.4.2-arm64.zip` passed signature, notarization-ticket and Gatekeeper checks. Every file and symlink matches the signed build. SHA-256: `3297346fb5045f365580e3c8544f8249a8ce112f0ef66599e5af0801139f3e0d`.
+- The extension retains CodeDirectory hash `b0d31a735387c7211d5655f2a3874cdafc875d1d`. Fresh live Canon/Zoom output was not independently retested for these interface-only changes.
+
+## Compact virtual-camera button rendering, 15 October 2026
+
+The user reported continuing movement in build 16 despite earlier stable outer-frame measurements. Version 2.4.1/build 17 uses one standard bordered compact button for both Start and Stop, with identical 56 × 40-point toolbar allocation and implicit animations disabled. The compact item explicitly hides its shared toolbar glass background, avoiding a second glass surface around the control. The full-width action retains its prior appearance. Apple's [standard button styles](https://developer.apple.com/documentation/SwiftUI/PrimitiveButtonStyle/borderedProminent) and [toolbar background API](https://developer.apple.com/documentation/swiftui/toolbarcontent/sharedbackgroundvisibility(_:)) informed this adjustment.
+
+- The baseline diagnostic still did not reproduce the reported jitter. This change removes a possible rendering/animation cause; the underlying cause was not independently confirmed.
+- The extended native review uses generated moving images at approximately 30 Hz, statistics updates every six frames, the app's actual menu-command definitions, and samples of toolbar view frames plus descendant layer positions, bounds, transforms and animation keys. Across 180 samples per case at widths 240, 240.5, 319.5, 400, 599 and 600, with virtual output both on and off, all 12 cases showed no layout/layer movement or overflow. The 240- and 240.5-point cases began with the test app active and window key; the later cases ran after the app lost focus. Start and Stop both measured 56 × 40 below 600 points. The test display's backing scale was 1.0. Results: `.build/jitter-review/samples.txt`; baseline: `.build/jitter-review/before-build16.txt`.
+- The signed arm64 package passed the build, architecture/dependency, platform-version and deep/strict signature checks. Apple accepted notarization `cf258956-9440-4658-bbd8-81724d867ace`; the ticket was stapled and validated, and Gatekeeper accepted the bundle. The extension remains build 10 with unchanged CodeDirectory hash `b0d31a735387c7211d5655f2a3874cdafc875d1d`.
+- Installed and reopened `/Applications/Camera Live Apple Silicon.app`; the executable and resource signature match the signed build, and the installed process was observed after launch. Build 16 is retained under `.build/installed-backup-2.4.1-build16`.
+- The user subsequently accepted the delivered interface as "perfect" and requested publication. This is user-reported visual acceptance; a fresh Canon/Zoom or physical-pointer hover test was not independently performed. Build 17 was the installed preview; release 2.4.2/build 18 packages the accepted changes.
+
+## Smaller minimum and inspector cleanup, 15 October 2026
+
+Version 2.4.1/build 16 reduces the minimum content area from 400 × 240 to 240 × 135 points, measured as a 240 × 187 native window including the title bar. Below 320 points wide, the controls popover combines Stream, Framing and Cameras so the virtual-camera action can remain visible. Wider windows retain separate camera/stream controls. The close button beside the Stream/Framing picker is removed; the toolbar toggle still closes the inspector, and popovers dismiss outside their bounds. Very short empty/error states can scroll to keep their actions reachable.
+
+- An isolated native review compiled the production views and passed 21 layout scenarios, including the new minimum, narrow/tall and short/wide windows, all three popover pages, closing with the toolbar toggle, crossing the 320-point threshold with a popover open, and shrinking with regular panels open. The generated-image Metal preview submitted a 240 × 135 drawable at the minimum. Both the notice and empty-state areas expose scroll views in the shortest error case. Results: `.build/mini-review/results.txt`.
+- With camera statistics changing five times per second, native toolbar views and their presentation layers stayed fixed across 90 samples per case at widths 240, 241, 319, 320, 400, 599, 600 and 1080, with output enabled and disabled (16 cases). Every expected control remained visible with no overflow. Results: `.build/toolbar-review/samples.txt`. These are simulated-camera layout checks, not a fresh Canon/Zoom or screenshot-based visual acceptance test.
+- The signed arm64 bundle passed architecture, dependency, platform-version and deep/strict signature checks. Apple accepted notarization `546a642a-2ca9-477b-ba62-db07bfa632f7`; the ticket was stapled and validated, and Gatekeeper accepted the bundle.
+- Installed and reopened `/Applications/Camera Live Apple Silicon.app`, preserving build 15 under `.build/installed-backup-2.4.1-build15`. The installed executable matches the signed build, and its running process was verified after launch completed.
+- The camera extension remains 2.4.0/build 10, with unchanged CodeDirectory hash `b0d31a735387c7211d5655f2a3874cdafc875d1d`. The published 2.4.1 release remains build 14.
+
+## Compact toolbar stability, 15 October 2026
+
+Version 2.4.1/build 15 gives toolbar items stable identities and moves the virtual-camera button into a separate view that observes only virtual-camera state. Its compact icon label has explicit dimensions before native button measurement. Windows narrower than 600 points omit the title from the toolbar, keeping room for Cameras, Stream Details and the virtual-camera action; larger windows restore the title and full action label.
+
+- The isolated native review reproduced the Start action disappearing into toolbar overflow at the 400-point minimum width. The reported continuous jiggle was not independently reproduced by the baseline frame sampler, so this is a measured correction of the crowded layout plus isolation from frequent camera-statistics updates, not a before/after visual recording of that symptom.
+- The corrected production views were exercised with simulated camera statistics changing five times per second. All three toolbar controls stayed visible, without overflow or frame/presentation-layer movement, across 90 samples per case at widths 400, 401, 599, 600, 700 and 1080 with the virtual camera both on and off (12 cases). Results are in `.build/toolbar-review/samples.txt`.
+- The existing native resize review also passed all 16 scenarios, including Cameras, Stream and Framing popovers and shrinking with panels open. The minimum window remains 400 × 292 including the title bar. These checks use generated images and simulated output state; they do not establish a fresh Canon/Zoom video or user-visible jitter acceptance check.
+- The signed arm64 package passed the architecture, dependency, platform-version and deep/strict signature checks. Apple accepted notarization `ec1607f4-b433-427a-b33a-80e117ef0fa4`; the ticket was stapled and validated, and Gatekeeper accepted the installed app.
+- Installed and reopened `/Applications/Camera Live Apple Silicon.app`, retaining the previous build under `.build/installed-backup-2.4.0-build13`. The camera extension remains 2.4.0/build 10 with unchanged CodeDirectory hash `b0d31a735387c7211d5655f2a3874cdafc875d1d`. The published 2.4.1 release remains build 14.
+
 ## Release 2.4.1, 15 October 2026
 
 Version 2.4.1/build 14 packages the Cameras panel cleanup and compact-window interface tested in builds 12 and 13 below. The application changes from build 13 are release version/build metadata only; the user accepted the delivered update and requested publication.

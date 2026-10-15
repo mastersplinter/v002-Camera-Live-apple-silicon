@@ -15,7 +15,7 @@ struct CameraLiveApp: App {
     var body: some Scene {
         WindowGroup("Camera Live") {
             CameraWindow(controller: delegate.controller, virtualCamera: delegate.virtualCamera)
-                .frame(minWidth: 400, minHeight: 240)
+                .frame(minWidth: 240, minHeight: 135)
         }
         .defaultSize(width: 1080, height: 720)
         .windowResizability(.contentMinSize)

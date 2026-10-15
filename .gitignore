@@ -6,3 +6,9 @@ libturbojpeg.0.dylib
 .dependencies/
 dist/
 __pycache__/
+*.p12
+*.p8
+*.mobileprovision
+*.provisionprofile
+.signing/
+*.key

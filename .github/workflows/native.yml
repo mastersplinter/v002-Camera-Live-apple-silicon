@@ -13,6 +13,8 @@ jobs:
         run: python3 scripts/build-dependencies.py
       - name: Test library
         run: python3 scripts/swift.py test --disable-sandbox --disable-xctest
+      - name: Test signing configuration validation
+        run: python3 scripts/test-signing.py
       - name: Package and audit arm64 app
         run: python3 scripts/build-app.py
       - uses: actions/upload-artifact@v4

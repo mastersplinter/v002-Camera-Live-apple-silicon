@@ -1,5 +1,34 @@
 # Validation
 
+## System Settings icon correction, 15 October 2026
+
+Build 3 replaces the manually assembled ICNS with Apple's `iconutil` output and includes the identical compiled icon in the camera extension, referenced by its `CFBundleIconFile`. Both bundles retain the existing Camera Live artwork.
+
+The previous installed app reproduced the reported green/red corruption through `NSWorkspace.icon(forFile:)` at 16, 24 and 32 pixels, even though directly decoding the ICNS with `NSImage` appeared correct. The rebuilt app rendered correctly through the macOS icon service at 16, 24, 32, 48, 64, 128, 256 and 512 pixels. The installed copy initially retained the old cached thumbnail; updating that app bundle's modification date and refreshing only its Launch Services registration corrected it. All eight installed-icon sizes then passed the grayscale pixel check, and the 32-pixel image was visually checked against the original artwork.
+
+The signed arm64 release passed the package dependency audit and deep/strict signature verification. Apple accepted notarization submission `a011d516-ab67-44b8-8da3-21cdab19e368`; the ticket was stapled and validated. The updated `/Applications/Camera Live Apple Silicon.app` passed Gatekeeper as Notarized Developer ID. Icon rendering was verified through the macOS icon service; the System Settings window itself was not inspected.
+
+## Virtual camera work, 14 October 2026
+
+The virtual-camera implementation, Apple-signed packaging and notarization are validated. The app is installed at `/Applications/Camera Live Apple Silicon.app`, alongside the original Camera Live. Extension activation and real Zoom capture are **not yet verified**. No signing identity was installed when this work began. A public certificate request and protected local private key were prepared under the ignored `.signing` folder. The user obtained the matching Developer ID Application certificate and app provisioning profile. Certificate trust verification passed; the profile matches the app identifier, team and signing certificate, and grants System Extension installation. The certificate/key were imported into the login keychain and used to sign the complete application. The user stored notarization credentials in the login keychain. Signing assets and credentials are not part of the repository.
+
+| Check | Result |
+| --- | --- |
+| Swift logic/image tests | 25 tests across 7 suites passed with native video-buffer access |
+| Signing input validation | 7 Python tests passed using synthetic profile metadata, including incorrect team/app/certificate, expiration, missing capability and legacy App ID prefixes |
+| Imported Developer ID identity | Matching certificate/private key installed; a disposable executable was signed with a secure timestamp and passed strict signature verification after Keychain approval |
+| Apple-signed release package | App, diagnostics, extension and dependencies signed with the same Developer ID identity; secure timestamps and hardened runtime enabled; app profile embedded; deep/strict signature verification passed |
+| Apple-signed diagnostic runtime | Packaged executable loaded its bundled libraries and passed GPU/CPU orientation, aspect fit, in-flight-buffer immutability and standby checks with hardened runtime enabled |
+| Apple notarization | Accepted submission `600ca6bc-4f82-4a05-85d7-6f8a2fe5d4c7`; ticket stapled and validated |
+| Installed application | Deep/strict signature and stapled ticket verified; Gatekeeper accepted it as Notarized Developer ID |
+| Release package | App, diagnostics and camera extension built; all 10 embedded Mach-O binaries passed the arm64/dependency audit and the bundle passed deep/strict ad-hoc signature verification |
+| Virtual-camera frame conversion | GPU and CPU paths passed upright red/blue pixels, aspect fitting at two source sizes, black margins and retained-buffer immutability |
+| Standby image | Rendered PNG inspected; extra vertical text inversion found and corrected, then verified upright |
+| Existing preview and Syphon | 738 generated frames published; receiver verified 50 frames across both source sizes with correct orientation/colour; 732 on-screen presentations, 29.87 fps steady state, maximum gap 125 ms, two gaps over 100 ms |
+| Installed-extension diagnostic | Correctly reported that Camera Live is not installed as a system camera; no end-to-end pass claimed |
+
+The Swift tests include source freshness, stop and resume through a fake transport; they do not exercise the real CMIO service. The synthetic signing tests validate input handling, not Apple's certificate trust or provisioning acceptance. The new AVFoundation diagnostic is ready to exercise the installed source/sink path after activation. Actual Zoom video, multiple consumers, extension replacement/removal and the activated extension's runtime behavior remain acceptance steps in [VIRTUAL_CAMERA.md](VIRTUAL_CAMERA.md).
+
 ## Automated acceptance
 
 Run `python3 scripts/swift.py test --disable-sandbox --disable-xctest` after building the pinned native dependencies. These tests do not need a connected camera or a Syphon receiver:

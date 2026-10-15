@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Create a relocatable, ad-hoc-signed Apple Silicon application bundle."""
+"""Create a relocatable Apple Silicon app with optional Apple Developer signing."""
 import os
 from pathlib import Path
 import shutil
 import subprocess
-import struct
 import sys
+import plistlib
 from swift import build_environment
+from signing import Signing, APP_ID, EXTENSION_ID
 
 ROOT = Path(__file__).resolve().parents[1]
 PREFIX = ROOT / '.dependencies/usr'
@@ -21,6 +22,7 @@ ENV = build_environment()
 
 def main():
     if os.uname().machine != 'arm64': raise SystemExit('Use a native Apple Silicon terminal.')
+    signing = Signing()
     run(sys.executable, ROOT / 'scripts/build-dependencies.py')
     run('swift', 'build', '--disable-sandbox', '-c', 'release', '--arch', 'arm64')
     binary_dir = Path(run('swift', 'build', '--disable-sandbox', '-c', 'release', '--arch', 'arm64', '--show-bin-path', capture=True))
@@ -31,6 +33,29 @@ def main():
     for path in (frameworks, resources, executables): path.mkdir(parents=True, exist_ok=True)
     shutil.copy2(ROOT / 'Resources/Info.plist', APP / 'Contents/Info.plist')
     for name in ('CameraLive', 'camera-live-diagnostics'): shutil.copy2(binary_dir / name, executables / name)
+    extension = APP / 'Contents/Library/SystemExtensions' / (EXTENSION_ID + '.systemextension')
+    extension_executable = extension / 'Contents/MacOS/CameraLiveCameraExtension'
+    extension_executable.parent.mkdir(parents=True)
+    shutil.copy2(binary_dir / 'CameraLiveCameraExtension', extension_executable)
+    extension_info = plistlib.loads((ROOT / 'Resources/CameraExtension-Info.plist').read_bytes())
+    extension_info['CMIOExtension']['CMIOExtensionMachServiceName'] = signing.group
+    (extension / 'Contents/Info.plist').write_bytes(plistlib.dumps(extension_info))
+    app_info = plistlib.loads((APP / 'Contents/Info.plist').read_bytes())
+    app_info['CameraLiveVirtualCameraInstallable'] = signing.enabled
+    (APP / 'Contents/Info.plist').write_bytes(plistlib.dumps(app_info))
+    shutil.copy2(ROOT / 'VIRTUAL_CAMERA.md', resources / 'VIRTUAL_CAMERA.md')
+    entitlements_directory = ROOT / '.build/signing'
+    entitlements_directory.mkdir(parents=True, exist_ok=True)
+    app_entitlements = entitlements_directory / 'App.entitlements'
+    extension_entitlements = entitlements_directory / 'Extension.entitlements'
+    diagnostics_entitlements = entitlements_directory / 'Diagnostics.entitlements'
+    app_entitlements.write_bytes(plistlib.dumps(signing.app_entitlements))
+    extension_entitlements.write_bytes(plistlib.dumps(signing.extension_entitlements))
+    diagnostics_entitlements.write_bytes(plistlib.dumps({'com.apple.security.device.camera': True}))
+    if signing.enabled:
+        shutil.copy2(signing.app_profile, APP / 'Contents/embedded.provisionprofile')
+        if signing.extension_profile:
+            shutil.copy2(signing.extension_profile, extension / 'Contents/embedded.provisionprofile')
     shutil.copytree(PREFIX / 'Frameworks/Syphon.framework', frameworks / 'Syphon.framework', symlinks=True)
     for name in ('libgphoto2.6.dylib', 'libgphoto2_port.12.dylib', 'libusb-1.0.0.dylib', 'libltdl.7.dylib'):
         shutil.copy2(PREFIX / 'lib' / name, frameworks / name)
@@ -44,7 +69,7 @@ def main():
     # Patch every copied Mach-O dependency. Absolute checkout paths must never be
     # required after moving the app, including dlopened camera/USB driver modules.
     binaries = [*executables.iterdir(), *frameworks.glob('*.dylib'),
-                frameworks / 'Syphon.framework/Versions/A/Syphon', *drivers.rglob('*.so')]
+                frameworks / 'Syphon.framework/Versions/A/Syphon', *drivers.rglob('*.so'), extension_executable]
     for binary in binaries:
         output = run('otool', '-L', binary, capture=True)
         for line in output.splitlines()[1:]:
@@ -70,18 +95,13 @@ def main():
         for scale in (1, 2):
             name = f'icon_{size}x{size}' + ('@2x' if scale == 2 else '') + '.png'
             run('sips', '-z', str(size*scale), str(size*scale), artwork, '--out', iconset / name, capture=True)
-    # ICNS is a length-prefixed collection of PNG representations. Writing the
-    # container directly also works on CLT hosts where iconutil's service fails.
-    chunks = []
-    representations = [('icp4', 16, 1), ('icp5', 32, 1), ('ic07', 128, 1),
-                       ('ic08', 256, 1), ('ic09', 512, 1), ('ic10', 512, 2),
-                       ('ic11', 16, 2), ('ic12', 32, 2), ('ic13', 128, 2), ('ic14', 256, 2)]
-    for code, size, scale in representations:
-        name = f'icon_{size}x{size}' + ('@2x' if scale == 2 else '') + '.png'
-        data = (iconset / name).read_bytes()
-        chunks.append(struct.pack('>4sI', code.encode(), len(data) + 8) + data)
-    payload = b''.join(chunks)
-    (resources / 'CameraLive.icns').write_bytes(struct.pack('>4sI', b'icns', len(payload) + 8) + payload)
+    # Let macOS encode every representation, including the small icons used by
+    # System Settings. Hand-assembling PNG chunks can produce corrupt thumbnails.
+    icon = resources / 'CameraLive.icns'
+    run('iconutil', '-c', 'icns', iconset, '-o', icon)
+    extension_resources = extension / 'Contents/Resources'
+    extension_resources.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(icon, extension_resources / icon.name)
     licenses = resources / 'Licenses'; licenses.mkdir()
     shutil.copy2(ROOT / 'LICENSE', licenses / 'Camera-Live.txt')
     shutil.copy2(ROOT / 'THIRD_PARTY_NOTICES.md', licenses / 'Third-Party-Notices.md')
@@ -96,10 +116,19 @@ def main():
             dependency = line.strip().split(' (')[0]
             if dependency.startswith('/') and not dependency.startswith(('/usr/lib/', '/System/Library/')):
                 raise RuntimeError(f'Unbundled dependency in {binary}: {dependency}')
-        run('codesign', '--force', '--sign', '-', binary)
-    run('codesign', '--force', '--sign', '-', frameworks / 'Syphon.framework')
-    run('codesign', '--force', '--sign', '-', APP)
+        diagnostic = binary.name == 'camera-live-diagnostics'
+        signing.sign(binary, run, identifier=APP_ID + '.Diagnostics' if diagnostic else None,
+                     entitlements=diagnostics_entitlements if diagnostic and signing.enabled else None)
+    signing.sign(frameworks / 'Syphon.framework', run)
+    signing.sign(extension, run, entitlements=extension_entitlements)
+    signing.sign(APP, run, entitlements=app_entitlements if signing.enabled else None)
     run('codesign', '--verify', '--deep', '--strict', APP)
+    if signing.enabled:
+        details = subprocess.run(['codesign', '-d', '--verbose=4', str(APP)], capture_output=True, text=True, check=True)
+        if f'TeamIdentifier={signing.team}' not in details.stderr:
+            raise RuntimeError('The selected signing certificate does not belong to CAMERALIVE_TEAM_ID.')
     print(f'Built {APP}')
+    if not signing.enabled:
+        print('Preview/Syphon build only: virtual-camera activation requires Apple signing. See VIRTUAL_CAMERA.md.')
 
 if __name__ == '__main__': main()

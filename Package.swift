@@ -10,7 +10,8 @@ let package = Package(
     products: [
         .library(name: "CameraLiveCore", targets: ["CameraLiveCore"]),
         .executable(name: "CameraLive", targets: ["CameraLiveApp"]),
-        .executable(name: "camera-live-diagnostics", targets: ["CameraLiveDiagnostics"])
+        .executable(name: "camera-live-diagnostics", targets: ["CameraLiveDiagnostics"]),
+        .executable(name: "CameraLiveCameraExtension", targets: ["CameraLiveCameraExtension"])
     ],
     targets: [
         .target(name: "CameraLiveNative", publicHeadersPath: "include",
@@ -23,9 +24,14 @@ let package = Package(
         .target(name: "CameraLiveCore", dependencies: ["CameraLiveNative"],
                 linkerSettings: [.linkedFramework("Metal"), .linkedFramework("MetalKit"), .linkedFramework("CoreImage"),
                                  .linkedFramework("ImageIO"), .linkedFramework("IOKit")]),
-        .executableTarget(name: "CameraLiveApp", dependencies: ["CameraLiveCore"]),
-        .executableTarget(name: "CameraLiveDiagnostics", dependencies: ["CameraLiveCore", "CameraLiveNative"]),
-        .testTarget(name: "CameraLiveCoreTests", dependencies: ["CameraLiveCore", "CameraLiveNative"])
+        .target(name: "VirtualCameraShared", linkerSettings: [.linkedFramework("CoreMedia"), .linkedFramework("CoreVideo"), .linkedFramework("CoreText")]),
+        .target(name: "CameraLiveVirtualCamera", dependencies: ["CameraLiveCore", "VirtualCameraShared"],
+                linkerSettings: [.linkedFramework("CoreMediaIO"), .linkedFramework("SystemExtensions")]),
+        .executableTarget(name: "CameraLiveCameraExtension", dependencies: ["VirtualCameraShared"],
+                linkerSettings: [.linkedFramework("CoreMediaIO")]),
+        .executableTarget(name: "CameraLiveApp", dependencies: ["CameraLiveCore", "CameraLiveVirtualCamera"]),
+        .executableTarget(name: "CameraLiveDiagnostics", dependencies: ["CameraLiveCore", "CameraLiveNative", "CameraLiveVirtualCamera", "VirtualCameraShared"]),
+        .testTarget(name: "CameraLiveCoreTests", dependencies: ["CameraLiveCore", "CameraLiveNative", "CameraLiveVirtualCamera", "VirtualCameraShared"])
     ],
     swiftLanguageModes: [.v5]
 )

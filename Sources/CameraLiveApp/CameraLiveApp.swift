@@ -1,13 +1,15 @@
 import AppKit
 import SwiftUI
 import CameraLiveCore
+import CameraLiveVirtualCamera
+import Combine
 
 @main
 struct CameraLiveApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
     var body: some Scene {
         WindowGroup("Camera Live") {
-            CameraWindow(controller: delegate.controller)
+            CameraWindow(controller: delegate.controller, virtualCamera: delegate.virtualCamera)
                 .frame(minWidth: 820, minHeight: 510)
         }
         .defaultSize(width: 1020, height: 650)
@@ -15,6 +17,9 @@ struct CameraLiveApp: App {
             CommandGroup(replacing: .newItem) {}
             CommandGroup(after: .appInfo) {
                 Button("Refresh Cameras") { delegate.controller.refresh() }.keyboardShortcut("r")
+                Button("Virtual Camera Setup Guide") { delegate.virtualCamera.openSetupGuide() }
+                Button("Remove Virtual Camera") { delegate.virtualCamera.uninstall() }
+                    .disabled(!delegate.virtualCamera.installed || delegate.virtualCamera.busy)
             }
         }
     }
@@ -23,11 +28,14 @@ struct CameraLiveApp: App {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let controller = CameraController()
+    let virtualCamera = VirtualCameraController()
+    private var previewSubscription: AnyCancellable?
     private var timer: Timer?
     private var observers: [NSObjectProtocol] = []
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+        previewSubscription = controller.$preview.sink { [weak self] in self?.virtualCamera.setFrames($0) }
         controller.refresh()
         timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.controller.refresh(automatically: true) }
@@ -43,7 +51,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         timer?.invalidate()
         DispatchQueue.main.async {
-            self.controller.shutdown { NSApp.reply(toApplicationShouldTerminate: true) }
+            let group = DispatchGroup()
+            group.enter(); self.virtualCamera.shutdown { group.leave() }
+            group.enter(); self.controller.shutdown { group.leave() }
+            group.notify(queue: .main) { NSApp.reply(toApplicationShouldTerminate: true) }
         }
         return .terminateLater
     }
@@ -52,6 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 struct CameraWindow: View {
     @ObservedObject var controller: CameraController
+    @ObservedObject var virtualCamera: VirtualCameraController
     private var selectedID: Binding<String?> {
         Binding(get: { controller.selectedDevice?.id }, set: { id in
             // List may clear its selection when a USB row disappears. Retain
@@ -87,8 +99,20 @@ struct CameraWindow: View {
                 }
                 Button { controller.refresh() } label: { Label("Refresh cameras", systemImage: "arrow.clockwise") }
                 Divider()
-                Text("Choose this feed in any Syphon-compatible app.")
-                    .font(.caption).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 10) {
+                    Label("Virtual Camera", systemImage: "video").font(.headline)
+                    Text(virtualCamera.message).font(.caption).foregroundStyle(.secondary)
+                    if virtualCamera.enabled {
+                        Button("Stop Virtual Camera") { virtualCamera.stop() }
+                    } else {
+                        Button(virtualCamera.installed ? "Start Virtual Camera" : "Enable Virtual Camera") { virtualCamera.start() }
+                            .disabled(virtualCamera.busy)
+                    }
+                    if !virtualCamera.installed {
+                        Button("Setup guide") { virtualCamera.openSetupGuide() }.buttonStyle(.link)
+                    }
+                }
+                Text("Syphon sharing is also available.").font(.caption).foregroundStyle(.secondary)
             }.padding(20).frame(minWidth: 235, idealWidth: 265, maxWidth: 330)
             VStack(alignment: .leading, spacing: 18) {
                 HStack {

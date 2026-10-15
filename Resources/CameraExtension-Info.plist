@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+    <key>CFBundleIdentifier</key><string>info.v002.CameraLive.AppleSilicon.CameraExtension</string>
+    <key>CFBundleName</key><string>Camera Live Camera Extension</string>
+    <key>CFBundleDisplayName</key><string>Camera Live</string>
+    <key>CFBundleExecutable</key><string>CameraLiveCameraExtension</string>
+    <key>CFBundlePackageType</key><string>SYSX</string>
+    <key>CFBundleShortVersionString</key><string>2.1.0</string>
+    <key>CFBundleVersion</key><string>3</string>
+    <key>CFBundleIconFile</key><string>CameraLive</string>
+    <key>LSMinimumSystemVersion</key><string>13.0</string>
+    <key>NSSystemExtensionUsageDescription</key><string>Camera Live makes your connected camera available to Zoom and other video apps.</string>
+    <key>CMIOExtension</key><dict>
+        <key>CMIOExtensionMachServiceName</key><string>UNSIGNED.info.v002.CameraLive.AppleSilicon</string>
+    </dict>
+</dict></plist>

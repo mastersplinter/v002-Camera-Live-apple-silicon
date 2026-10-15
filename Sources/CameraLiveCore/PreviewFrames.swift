@@ -7,6 +7,7 @@ public final class PreviewFrames {
     public struct Frame {
         public let image: CGImage
         public let sequence: UInt64
+        public let receivedAt: TimeInterval
     }
 
     private let lock = NSLock()
@@ -20,7 +21,7 @@ public final class PreviewFrames {
         lock.lock(); defer { lock.unlock() }
         guard !closed else { return }
         sequence &+= 1
-        latest = Frame(image: image, sequence: sequence)
+        latest = Frame(image: image, sequence: sequence, receivedAt: ProcessInfo.processInfo.systemUptime)
     }
 
     public func snapshot() -> Frame? {

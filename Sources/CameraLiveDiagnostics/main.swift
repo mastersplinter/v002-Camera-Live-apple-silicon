@@ -132,7 +132,11 @@ func verifyPattern(_ texture: MTLTexture, device: MTLDevice) {
 }
 let args = Array(CommandLine.arguments.dropFirst())
 let mode = args.first ?? "--help"
-if mode == "--list" {
+if mode == "--virtual-frame-test" {
+    do { try verifyVirtualFrames() } catch { fail(error.localizedDescription) }
+} else if mode == "--virtual-camera-test" {
+    do { try verifyInstalledVirtualCamera() } catch { fail(error.localizedDescription) }
+} else if mode == "--list" {
     let result = Locked<Result<[CameraDevice], Error>?>(nil)
     CameraCatalog.shared.discover { result.set($0) }
     runLoop(until: Date().addingTimeInterval(30)) { result.read() != nil }
@@ -234,6 +238,8 @@ if mode == "--list" {
 } else {
     print("""
     Camera Live native diagnostics
+      --virtual-frame-test                Check virtual-camera pixels, fit and buffer ownership
+      --virtual-camera-test               Check the installed extension through AVFoundation
       --list                             Discover USB PTP cameras
       --capture [usb:PORT] [--preview]      Publish a real camera and report frame timing
       --test-pattern [name] [--preview]    Publish two test resolutions for 25 seconds

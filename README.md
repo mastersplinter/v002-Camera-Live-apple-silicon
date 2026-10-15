@@ -1,6 +1,6 @@
 # Camera Live for Apple Silicon
 
-A native arm64 rewrite of v002 Camera Live. It turns a USB DSLR's live view into a **Syphon Metal video feed** for compatible creative/video applications. The target camera is the **Canon EOS 550D / Rebel T2i / Kiss X4**.
+A native arm64 rewrite of v002 Camera Live. It turns a USB DSLR's live view into a **Syphon Metal video feed**, with an optional **Camera Live virtual camera** for Zoom and other video apps. The target camera is the **Canon EOS 550D / Rebel T2i / Kiss X4**. The virtual-camera implementation requires Apple signing, notarization and macOS activation before use; see [setup and validation](VIRTUAL_CAMERA.md).
 
 The app and reusable `CameraLiveCore` Swift library replace the original Objective-C application, Canon EDSDK integration, Intel libjpeg-turbo dependency, and OpenGL video pipeline. Camera access uses a locally built arm64 libgphoto2; JPEG decoding uses ImageIO; Core Image and Metal render into shared IOSurface-backed textures for Syphon. Rosetta and Homebrew are not required to run the built app.
 
@@ -36,7 +36,7 @@ The preview resolution and frame rate come from the camera's live-view output, n
 
 The preview presents the newest decoded frame on a display-synchronised Metal view, independently of the status readout. It does not interpolate motion or generate extra camera frames. Automatic USB discovery pauses during capture to avoid interrupting the feed; use **Refresh cameras** to look for another camera while streaming.
 
-This is a Syphon server, not a system webcam driver. Video-call software needs a separate compatible virtual-camera/Syphon receiver workflow.
+With the signed, notarized camera extension installed, click **Start Virtual Camera** and select **Camera Live** in Zoom. The extension delivers a 1280 × 720 stream at 30 Hz, fits the source image without stretching, and shows a standby screen when input stops. The default ad-hoc build supports preview and Syphon only; it cannot activate the virtual camera. See [VIRTUAL_CAMERA.md](VIRTUAL_CAMERA.md).
 
 ## Validation and diagnostics
 
@@ -72,6 +72,7 @@ Open `Package.swift` in Xcode, or use Swift Package Manager. Build the native de
 - `MetalFramePipeline` maintains at most one frame in flight plus one pending frame, dropping stale queued frames. It publishes valid frames to Syphon and reports dimensions, rate and client presence.
 - `PreviewFrames` stores one latest decoded image. `CameraPreviewView` samples it at display refresh, with at most two GPU submissions in flight and no per-frame SwiftUI updates. Statistics refresh separately at up to 5 Hz.
 - `CameraController` serializes lifecycle transitions, selection persistence and sleep/reconnect handling. All USB operations run on one worker queue; decoding and Syphon rendering run on another. UI state and preview presentation are isolated to the main thread.
+- `VirtualCameraPublisher` samples the same latest image, renders to a separate bounded pixel-buffer pool and feeds a CMIO sink. `CameraLiveCameraExtension` exposes the source stream to video apps, repeating fresh frames at 30 Hz and clearing stale input. `VirtualCameraController` manages activation, start/stop and removal.
 
 The saved selection uses model plus USB address. After an address change, automatic recovery is allowed only for a unique matching model. It deliberately waits for a selection when multiple identical models make recovery ambiguous. The old Canon SDK's saved serial-number preference is not migrated.
 

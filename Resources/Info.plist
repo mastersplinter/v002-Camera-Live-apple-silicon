@@ -6,11 +6,13 @@
     <key>CFBundleDisplayName</key><string>Camera Live</string>
     <key>CFBundleExecutable</key><string>CameraLive</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>2.0.0</string>
-    <key>CFBundleVersion</key><string>1</string>
+    <key>CFBundleShortVersionString</key><string>2.1.0</string>
+    <key>CFBundleVersion</key><string>3</string>
     <key>CFBundleIconFile</key><string>CameraLive</string>
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <key>NSHighResolutionCapable</key><true/>
-    <key>NSCameraUsageDescription</key><string>Camera Live uses your connected USB camera to share its live view with Syphon-compatible apps.</string>
+    <key>NSCameraUsageDescription</key><string>Camera Live shares your camera with video apps and checks its virtual-camera output.</string>
     <key>NSPrincipalClass</key><string>NSApplication</string>
+    <key>NSSystemExtensionUsageDescription</key><string>Camera Live makes your connected camera available to Zoom and other video apps.</string>
+    <key>CameraLiveVirtualCameraInstallable</key><false/>
 </dict></plist>

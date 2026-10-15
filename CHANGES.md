@@ -1,3 +1,11 @@
+## 2.1.0 Virtual camera integration (activation testing pending)
+
+- Compile the app icon with Apple's icon utility and share it with the camera extension for consistent System Settings artwork.
+- Add a Core Media IO camera extension for direct camera selection in Zoom and other video apps, with activation, start/stop and removal controls.
+- Deliver aspect-preserving 720p video at 30 Hz with bounded buffers and a standby frame when camera input stops.
+- Package the extension and support Developer ID signing, provisioning validation and notarization. The default ad-hoc build continues to support preview and Syphon; extension activation requires the Apple setup in VIRTUAL_CAMERA.md.
+- Add format, stale-frame and publisher lifecycle tests, GPU/CPU orientation checks, signing validation tests and an installed-extension AVFoundation diagnostic.
+
 ## 2.0.0 Apple Silicon rewrite
 
 - Correct the Metal preview's inverted vertical orientation and verify pixels from the actual display drawable as well as the separate Syphon receiver.

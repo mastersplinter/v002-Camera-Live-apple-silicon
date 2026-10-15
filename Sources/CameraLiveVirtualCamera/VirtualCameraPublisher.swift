@@ -21,6 +21,7 @@ public final class VirtualCameraPublisher {
     private var retryAt: TimeInterval = 0
     private var lastAccepted: TimeInterval = 0
     private var renderer: VirtualCameraRenderer?
+    private var framing = VideoFraming()
     private let transport: VirtualCameraTransport
 
     public convenience init(report: @escaping (VirtualCameraOutputStatus) -> Void) {
@@ -36,6 +37,17 @@ public final class VirtualCameraPublisher {
         queue.async {
             self.disconnect()
             self.frames = frames; self.retryAt = 0
+        }
+    }
+    public func setFraming(_ framing: VideoFraming) {
+        queue.async { [self] in
+            guard self.framing != framing else { return }
+            if self.framing.canvas != framing.canvas {
+                disconnect(); renderer = nil; retryAt = 0
+            }
+            self.framing = framing
+            // Crop changes must be visible even when reusing the same camera frame.
+            lastImage = nil; lastSequence = 0
         }
     }
     public func setEnabled(_ enabled: Bool) {
@@ -77,11 +89,11 @@ public final class VirtualCameraPublisher {
         guard now >= retryAt else { return }
         do {
             if !connected {
-                try transport.start(); connected = true; lastAccepted = now
+                try transport.start(canvas: framing.canvas); connected = true; lastAccepted = now
             }
-            if renderer == nil { renderer = try VirtualCameraRenderer() }
+            if renderer == nil { renderer = try VirtualCameraRenderer(canvas: framing.canvas) }
             if frame.sequence != lastSequence || lastImage == nil {
-                lastImage = try renderer!.render(frame.image)
+                lastImage = try renderer!.render(frame.image, framing: framing)
                 lastSequence = frame.sequence
             }
             guard let lastImage else { return }

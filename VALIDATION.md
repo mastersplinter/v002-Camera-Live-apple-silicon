@@ -1,5 +1,81 @@
 # Validation
 
+## macOS 26 interface refinements, 15 October 2026
+
+Version 2.4.0/build 10 requires macOS 26 for both the host and camera extension. The older split-pane inspector fallback is removed. The interface uses the system title bar and window buttons, automatic toolbar styling, a native Liquid Glass primary action, and a Stream-first inspector that resets to Stream when reopened. The crop toolbar button, bottom status bar and requested explanatory text are removed.
+
+The previous installed host's Mach-O header reported both `minos 13.0` and `sdk 13.0`, despite compilation using a newer SDK. The build wrapper now passes the selected SDK version explicitly to the linker. The package builder audits the deployment and SDK stamps for the host, diagnostic and extension, and rejects SDKs older than 26. This release reports `minos 26.0` and `sdk 27.0` on all three executables, matching the selected Command Line Tools SDK. Window buttons remain native system controls; their final appearance is a manual on-screen check.
+
+- All 31 regression tests across eight suites passed on this macOS 26.7.1 Apple Silicon Mac.
+- The signed release diagnostic passed GPU and CPU checks at 720p and 1080p: upright orientation, borderless fill, immutable in-flight buffers and standby output.
+- The arm64 release, embedded dependency audit, deployment/SDK audit and deep/strict signature verification passed. Apple accepted notarization `0b534ddb-3973-4964-be1e-eb6acf8e83ba`; the ticket was stapled and validated, and Gatekeeper accepted the installed app as Notarized Developer ID.
+- Installed and reopened `/Applications/Camera Live Apple Silicon.app`; the previous 2.3.0 app is retained under `.build/installed-backup-2.3.0`.
+- The reopened app delivered ten live Canon EOS 550D Metal frames at 1056 × 704 to an independent read-only Syphon receiver. No camera images were saved.
+- Initial build 10 ZIP (superseded and retained under `.build/replaced-release-2.4.0-build10/Camera-Live-2.4.0-arm64.zip`), SHA-256 `39a02fe6496bc3c5304fa63aa44177d859e40aef504df205647ce177a916f391`. Its separately extracted archive passed signature verification and matched the then-installed app. No GitHub publication was requested for this update.
+
+At the initial post-install check, macOS still had extension 2.2.0/build 8 activated. macOS subsequently confirmed 2.4.0/build 10 **activated and enabled**. The user rejected build 10's appearance and supplied a screenshot showing a full-width grey strip across the loading preview. Build 10 therefore did not pass visual acceptance.
+
+The host-only build 11 correction explicitly hides the automatic toolbar background while preserving native glass controls and the established inspector placement. An isolated SwiftUI review app using the same view source and a simulated loading state confirmed the full-width titlebar background views are hidden, while glass controls and 14 × 14-point system window buttons remain. Bitmap rendering omits native glass/SwiftUI layers in this environment, so that evidence establishes view visibility, not a screenshot-based visual pass. A forced small-window check reported oversized split-view frames and potential inspector-header overlap with either inspector placement; the sizing experiments did not resolve that result and were not added to production. Final on-screen confirmation, including small-window resizing, remains necessary.
+
+- The final build 11 passed the arm64/dependency and platform-version audits and deep/strict signature verification. Apple accepted notarization `f22d5d8d-2d7d-4664-9fe2-4b8f12fe8c0d`; the ticket was stapled and validated, and the installed app passed Gatekeeper assessment.
+- Installed and reopened build 11, preserving build 10 under `.build/installed-backup-2.4.0-build10`. The camera extension remains 2.4.0/build 10, with unchanged CodeDirectory hash `b0d31a735387c7211d5655f2a3874cdafc875d1d`; macOS still reports it **activated and enabled**.
+- Final ZIP: `dist/releases/2.4.0/Camera-Live-2.4.0-arm64.zip`, SHA-256 `1690917a19108553dfe8485e1e4c76ed78c09f39b2fc42567a8b0e51593f4f1f`. The separately extracted archive passed signature verification and matches the installed host, diagnostic, extension executable and resource signature.
+- The user has been asked to check that the grey bar is gone, the inspector looks correct and the Zoom picture still works. Those final on-screen results are pending.
+- The post-install Syphon receiver received no frames. A follow-up process/USB check confirmed build 11 was running but no Canon device was present in the USB registry. The user has been asked to wake or reconnect the camera; live-video verification for build 11 is pending and no pass is claimed.
+
+The user subsequently accepted the update ("that's great") and requested committing and publishing it to their personal GitHub repository. This records acceptance of the delivered update; it does not establish a fresh independent live-camera or Zoom check, or resolve the small-window diagnostic concern above. The release package is the same notarized build 11 installed for that review.
+
+## Focus interface, 15 October 2026
+
+Version 2.3.0/build 9 implements the selected Focus design with a native navigation split view, a collapsible camera sidebar, a prominent virtual-camera toolbar action, a compact status footer and a Framing/Stream inspector. Framing changes remain visible beside the preview. Native controls provide system appearance and accessibility adaptations; macOS 13 retains a split-pane inspector fallback.
+
+Design references reviewed: Apple’s [Adopting Liquid Glass](https://developer.apple.com/documentation/technologyoverviews/adopting-liquid-glass), [Toolbars](https://developer.apple.com/design/human-interface-guidelines/toolbars) and [Sidebars](https://developer.apple.com/design/human-interface-guidelines/sidebars). The implementation removes custom navigation backgrounds and uses system components. Camera selection is exposed on first launch; returning users open the Focus preview with a sidebar toggle available.
+
+- All 31 regression tests across eight suites passed with native video-buffer access. The packaged diagnostic passed GPU and CPU checks for upright, borderless 720p/1080p output and buffer ownership.
+- The arm64 release build, embedded dependency audit and deep/strict signature verification passed. Apple accepted notarization `ac066e56-b789-413d-8bf6-712f9e26d533`; the ticket was stapled and validated, and Gatekeeper accepted the installed app as Notarized Developer ID.
+- The host is 2.3.0/build 9; the camera extension remains 2.2.0/build 8. Its CodeDirectory hash is unchanged (`c5152852f891a1121740e726a1b7081617f8eb69`), and macOS still reports it **activated and enabled**. The host checks the enabled extension version before requesting a replacement.
+- Installed at `/Applications/Camera Live Apple Silicon.app`, retaining the previous app under `.build/installed-backup-2.2.0`. The extracted archive, installed app and build output match for both executables, the extension executable and resource signature.
+- Packaged ZIP: `dist/releases/2.3.0/Camera-Live-2.3.0-arm64.zip`, SHA-256 `324d92c5e7e8b7a5a38df55845173a2ae068db555458e7930b6fb06073a91753`. No GitHub publication was requested for this update.
+- An isolated app-owned review harness rendered the Focus preview with a clearly labelled simulated image at 1080-point width. Native glass/sidebar/inspector layers produced invalid bitmap captures in this environment, so these captures do not establish full visual acceptance. No real camera image or other application screen was captured. macOS 13 runtime behaviour, Reduce Transparency, VoiceOver interaction and full on-screen appearance remain manual checks.
+
+The user checked the installed Focus layout, Framing inspector and live Zoom picture and explicitly confirmed: “Yes, layout and Zoom both work”. This is user-reported on-screen acceptance for 2.3.0. After an initial receiver attempt found no frames during restart, a subsequent read-only Syphon receiver obtained ten live Canon EOS 550D frames at 1056 × 704 from the reopened app. No source-selection change was needed.
+
+Following that confirmation, an independent AVFoundation receiver passed eight-second live checks at both sizes. Each received 239 frames at 30.00 fps with zero invalid frames: 720p had 188 distinct sampled frames and a maximum timestamp gap of 37.9 ms; 1080p had 186 distinct sampled frames and a maximum gap of 37.2 ms. These measure the virtual camera’s delivery, not Zoom’s internal frame rate. No camera images were saved. Long-duration operation remains outside this check.
+
+## Canvas and framing, 15 October 2026
+
+Version 2.2.0/build 8 adds 720p/1080p canvases, default aspect-fill cropping, saved zoom/pan controls, a matching cropped preview, and multi-format camera-extension delivery. The original Syphon feed is unchanged.
+
+- All 31 Swift tests across eight suites passed with native macOS video-buffer access. New checks cover the 550D's exact centred crop (1056 × 594 from 1056 × 704), portrait/wide sources, all pan limits, saved-setting validation, pixel colours/orientation at both output sizes, consumer resizing, and crop/canvas changes while publishing.
+- The signed release diagnostic passed GPU and CPU pixel checks for 720p and 1080p, including upright orientation, filled edges, retained-buffer immutability and standby output.
+- The native arm64 package passed its architecture/dependency audit and deep/strict signature verification. Both app and extension are version 2.2.0/build 8.
+- The generated-pattern preview attempt published 748 frames at 30.00 fps, but the current desktop session presented zero drawable frames. Consequently, the on-screen preview check did **not** pass; no visual UI or on-screen pacing validation is claimed for this build.
+- After the user's explicit approval, Apple accepted notarization `a485141a-8325-4c66-84be-ac6fc1048662`. The ticket was stapled and validated. The installed `/Applications/Camera Live Apple Silicon.app` passed deep/strict signature verification and Gatekeeper assessment as Notarized Developer ID. Its packaged GPU/CPU checks passed again after installation.
+- Version 2.2.0/build 8 is installed and macOS reports its extension **activated and enabled**. The previous 2.1.1 app is retained under `.build/installed-backup-2.1.1`. The reopened app delivered ten live Canon EOS 550D frames at 1056 × 704 to the separate Syphon receiver. The first activation retained the old extension connection and required reopening the host, as with the previous release.
+- The notarized ZIP is `dist/releases/2.2.0/Camera-Live-2.2.0-arm64.zip`, SHA-256 `09822fd09979830633451616af6b44d859915035ece1e9e7a414fdcba48b00e6`. It has not been published to GitHub.
+
+The initial 720p diagnostic received 1080p buffers because an AVFoundation session preset does not by itself constrain video-data output dimensions on macOS. The receiver now explicitly requests width and height in `videoSettings` and reports the actual format/pixels when a check fails. The camera-extension code did not require a correction. With the host producer stopped and Zoom still open, the installed extension passed these generated-pattern checks:
+
+| Producer canvas | Receiver output | Live frames | Standby frames after stop | Steady delivery | Maximum gap |
+| --- | --- | --- | --- | --- | --- |
+| 1280 × 720 | 1280 × 720 | 180 | 30 | 30.00 fps | 36.19 ms |
+| 1920 × 1080 | 1920 × 1080 | 180 | 30 | 30.00 fps | 38.11 ms |
+| 1920 × 1080 | 1280 × 720 | 180 | 30 | 29.99 fps | 87.74 ms |
+| 1280 × 720 | 1920 × 1080 | 180 | 30 | 30.02 fps | 36.80 ms |
+
+All four checks verified upright colours and filled edges with no invalid frames or gaps over 100 ms. These establish the real signed source/sink path through the extension sandbox and AVFoundation at both requested delivery sizes. AVFoundation can negotiate or scale frames when other consumers share the device; the checks do not imply independent hardware formats for every simultaneous client.
+
+After the final reinstall/reopen, a read-only receiver obtained 239 valid 720p frames and 240 valid 1080p frames. Each run had only one distinct sampled frame, consistent with standby while awaiting the GUI start action; neither run established changing live Canon video. No camera images were saved. The installed app, separately extracted archive, and build output matched for the host executable, diagnostic executable, extension executable, and resource signature.
+
+After starting the virtual camera and checking Framing and Zoom, the user explicitly confirmed: “Yes, the picture fills the canvas”. This establishes the requested borderless Zoom picture on this Mac as a user-reported acceptance result for 2.2.0. A subsequent read-only AVFoundation check independently received changing live video at both resolutions:
+
+| Receiver output | Frames | Distinct sampled frames | Invalid frames | Delivery | Maximum timestamp gap |
+| --- | --- | --- | --- | --- | --- |
+| 1280 × 720 | 239 | 147 | 0 | 30.00 fps | 36.0 ms |
+| 1920 × 1080 | 239 | 155 | 0 | 29.88 fps | 66.7 ms |
+
+These eight-second checks measured delivery from the installed virtual camera, not Zoom's internal frame rate. No camera images were saved. The user confirmation and changing-frame checks complete the live acceptance check; the automated on-screen preview limitation above still applies. Long-duration operation remains outside this check.
+
 ## Virtual camera connection investigation, 15 October 2026
 
 macOS now reports the Camera Live 2.1.0/build 3 extension as **activated and enabled**, and exposes both its video source and input sink. The earlier activation blocker is resolved.

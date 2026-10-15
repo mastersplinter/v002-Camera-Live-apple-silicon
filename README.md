@@ -2,14 +2,14 @@
 
 A native arm64 rewrite of v002 Camera Live. It turns a USB DSLR's live view into a **Syphon Metal video feed**, with an optional **Camera Live virtual camera** for Zoom and other video apps. The target camera is the **Canon EOS 550D / Rebel T2i / Kiss X4**. The virtual-camera implementation requires Apple signing, notarization and macOS activation before use; see [setup and validation](VIRTUAL_CAMERA.md).
 
-The signed, notarized [2.1.1 release](https://github.com/mastersplinter/v002-Camera-Live-apple-silicon/releases/tag/v2.1.1) has been tested with live Canon EOS 550D video in Zoom. It fixes the virtual-camera input and sender-verification failures in 2.1.0. After updating and enabling the extension, if the app stays on “Waiting for macOS…”, quit and reopen Camera Live, then start the camera and virtual camera again. Reopen Zoom if its camera list has not refreshed.
+Download the signed, notarized [2.4.0 release](https://github.com/mastersplinter/v002-Camera-Live-apple-silicon/releases/tag/v2.4.0) for Apple Silicon and macOS 26 or newer. It adds the Focus interface, native Liquid Glass controls, 720p/1080p canvases and saved crop controls. See [validation results and remaining checks](VALIDATION.md) for the distinction between automated checks and live-camera verification. After updating and enabling the extension, if the app stays on “Waiting for macOS…”, quit and reopen Camera Live, then start the camera and virtual camera again. Reopen Zoom if its camera list has not refreshed.
 
 The app and reusable `CameraLiveCore` Swift library replace the original Objective-C application, Canon EDSDK integration, Intel libjpeg-turbo dependency, and OpenGL video pipeline. Camera access uses a locally built arm64 libgphoto2; JPEG decoding uses ImageIO; Core Image and Metal render into shared IOSurface-backed textures for Syphon. Rosetta and Homebrew are not required to run the built app.
 
 ## Requirements
 
-- Apple Silicon Mac, macOS 13 or newer.
-- Swift 6.0 or newer, Python 3, and Apple's Command Line Tools (or Xcode) to build.
+- Apple Silicon Mac, macOS 26 or newer.
+- Python 3 and Xcode 26 or newer (or Command Line Tools with a macOS 26 or newer SDK) to build.
 - Internet access for the first dependency build. Source downloads are pinned by version/revision and SHA-256.
 - A USB PTP camera with libgphoto2 live-view support. See [camera support](CAMERAS.md).
 
@@ -30,15 +30,19 @@ The result is a relocatable, ad-hoc-signed application at `dist/Camera Live.app`
 
 1. Connect the camera's USB port directly to the Mac with a data-capable cable and turn the camera on.
 2. Quit EOS Utility, Photos, Image Capture, and any other app using the camera. Only one app can own the USB camera session.
-3. Open Camera Live and select the Canon in the camera list. Live view starts automatically.
+3. Open Camera Live and select the Canon in the camera sidebar. Live view starts automatically. Use the sidebar button to show or hide the camera list; returning users start with the larger Focus preview.
 4. In your Syphon receiver, choose the server named **Canon EOS 550D** (the exact name follows the camera's reported model).
-5. Use **Stop** before disconnecting when practical. Unexpected disconnects stop the session; reconnecting the same model resumes it when it is unambiguous.
+5. Use **Camera → Stop Camera**, or **Stop Camera** in Stream Details (⇧⌘I), before disconnecting when practical. Unexpected disconnects stop the session; reconnecting the same model resumes it when it is unambiguous.
 
 The preview resolution and frame rate come from the camera's live-view output, not its movie recording settings. A 1080p movie setting does not imply a 1080p USB live-view feed. Camera Live publishes video only, with no audio, recording, or shutter capture.
 
 The preview presents the newest decoded frame on a display-synchronised Metal view, independently of the status readout. It does not interpolate motion or generate extra camera frames. Automatic USB discovery pauses during capture to avoid interrupting the feed; use **Refresh cameras** to look for another camera while streaming.
 
-With the signed, notarized camera extension installed, click **Start Virtual Camera** and select **Camera Live** in Zoom. The extension delivers a 1280 × 720 stream at 30 Hz, fits the source image without stretching, and shows a standby screen when input stops. The default ad-hoc build supports preview and Syphon only; it cannot activate the virtual camera. See [VIRTUAL_CAMERA.md](VIRTUAL_CAMERA.md).
+With the signed, notarized camera extension installed, click **Start Virtual Camera** and select **Camera Live** in Zoom. Open the side inspector with **Stream Details** (⇧⌘I), then select **Framing** to choose **1280 × 720** or **1920 × 1080**. Video fills the 16:9 canvas by default, cropping the excess without stretching. Use **Zoom**, **Horizontal position** and **Vertical position** to frame the shot; **Reset Framing** restores the centred fill crop while keeping your chosen canvas. Settings are saved automatically, and the preview shows the same crop as the virtual camera. Syphon retains the original camera image.
+
+The **Focus** interface keeps the preview central, with standard macOS window buttons, a native toolbar, an optional camera sidebar and a Stream/Framing inspector. The inspector opens on **Stream** each time; select **Framing** to adjust the crop beside the picture. Camera statistics and output status are in Stream, and setup or error messages appear above the preview when action is needed. System controls and the primary Liquid Glass action follow the Mac’s appearance and accessibility settings. macOS 26 is the minimum; older interface fallbacks have been removed.
+
+The virtual camera delivers at 30 Hz and shows a standby screen when input stops. Video apps can negotiate either advertised resolution, so Zoom may use a different size from the selected canvas. Selecting 1080p upscales the 550D's live-view pixels; it does not add camera detail. The default ad-hoc build supports preview and Syphon only; it cannot activate the virtual camera. See [VIRTUAL_CAMERA.md](VIRTUAL_CAMERA.md).
 
 ## Validation and diagnostics
 

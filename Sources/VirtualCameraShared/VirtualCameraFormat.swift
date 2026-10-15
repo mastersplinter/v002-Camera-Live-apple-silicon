@@ -19,17 +19,17 @@ public enum VirtualCameraFormat {
     public static let staleInterval: TimeInterval = 0.5
     public static let queueSize = 3
 
-    public static func description() throws -> CMVideoFormatDescription {
+    public static func description(canvas: VideoCanvas = .hd720) throws -> CMVideoFormatDescription {
         var description: CMVideoFormatDescription?
         let status = CMVideoFormatDescriptionCreate(allocator: kCFAllocatorDefault,
-            codecType: kCVPixelFormatType_32BGRA, width: Int32(width), height: Int32(height),
+            codecType: kCVPixelFormatType_32BGRA, width: Int32(canvas.width), height: Int32(canvas.height),
             extensions: nil, formatDescriptionOut: &description)
         guard status == noErr, let description else { throw VirtualCameraError.operation("Create video format", status) }
         return description
     }
 
     public static func accepts(_ buffer: CVPixelBuffer) -> Bool {
-        CVPixelBufferGetWidth(buffer) == width && CVPixelBufferGetHeight(buffer) == height &&
+        VideoCanvas.allCases.contains { CVPixelBufferGetWidth(buffer) == $0.width && CVPixelBufferGetHeight(buffer) == $0.height } &&
         CVPixelBufferGetPixelFormatType(buffer) == kCVPixelFormatType_32BGRA
     }
 
@@ -47,7 +47,8 @@ public enum VirtualCameraFormat {
         return result
     }
 
-    public static func placeholder() throws -> CVPixelBuffer {
+    public static func placeholder(canvas: VideoCanvas = .hd720) throws -> CVPixelBuffer {
+        let width = canvas.width, height = canvas.height
         var buffer: CVPixelBuffer?
         let attributes: [CFString: Any] = [kCVPixelBufferIOSurfacePropertiesKey: [:],
             kCVPixelBufferCGImageCompatibilityKey: true, kCVPixelBufferCGBitmapContextCompatibilityKey: true]
@@ -62,6 +63,8 @@ public enum VirtualCameraFormat {
         }
         context.setFillColor(CGColor(gray: 0.07, alpha: 1))
         context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        let scale = CGFloat(width) / 1280
+        context.scaleBy(x: scale, y: scale)
         // The bitmap's rows already match the CVPixelBuffer destination. An
         // additional Y flip here inverts the text delivered to camera clients.
         for (text, size, y) in [("Camera Live", 48.0, 380.0), ("Start your camera in Camera Live", 24.0, 320.0)] {
@@ -70,7 +73,7 @@ public enum VirtualCameraFormat {
                 NSAttributedString.Key(kCTForegroundColorAttributeName as String): CGColor(gray: 0.85, alpha: 1)]
             let line = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: attributes))
             let lineWidth = CTLineGetTypographicBounds(line, nil, nil, nil)
-            context.textPosition = CGPoint(x: (Double(width) - lineWidth) / 2, y: y)
+            context.textPosition = CGPoint(x: (1280 - lineWidth) / 2, y: y)
             CTLineDraw(line, context)
         }
         return buffer

@@ -4,6 +4,7 @@ import CameraLiveNative
 import Foundation
 import Metal
 import UniformTypeIdentifiers
+import VirtualCameraShared
 
 final class Locked<Value> {
     private let lock = NSLock()
@@ -50,6 +51,9 @@ func previewWindow(frames: PreviewFrames, timings: FrameTimings, checkPattern: B
     let app = NSApplication.shared
     app.setActivationPolicy(.regular)
     let view = try CameraPreviewView(frames: frames)
+    if CommandLine.arguments.contains("--framed-preview") {
+        view.framing = VideoFraming(canvas: .hd1080, zoom: 1.4, horizontal: 0.3, vertical: 0.6)
+    }
     view.didPresent = { timings.record($0) }
     if checkPattern { view.inspectDrawable = verifyPreviewOrientation }
     let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 960, height: 640),
@@ -63,13 +67,17 @@ func previewWindow(frames: PreviewFrames, timings: FrameTimings, checkPattern: B
     return window
 }
 func verifyPreviewOrientation(_ texture: MTLTexture, commands: MTLCommandBuffer) {
-    guard let bytes = texture.device.makeBuffer(length: 512, options: .storageModeShared),
+    var points = [(texture.width / 2, texture.height / 4), (texture.width / 2, texture.height * 3 / 4)]
+    if CommandLine.arguments.contains("--framed-preview") {
+        points += [(5, texture.height / 4), (5, texture.height * 3 / 4)]
+    }
+    guard let bytes = texture.device.makeBuffer(length: points.count * 256, options: .storageModeShared),
           let copy = commands.makeBlitCommandEncoder() else { fail("Cannot inspect preview orientation.") }
     // Sample the actual drawable, inside the fitted image for both test aspect
     // ratios. This catches destination-specific flips that a Syphon-only test misses.
-    for (index, y) in [texture.height / 4, texture.height * 3 / 4].enumerated() {
+    for (index, point) in points.enumerated() {
         copy.copy(from: texture, sourceSlice: 0, sourceLevel: 0,
-                  sourceOrigin: MTLOrigin(x: texture.width / 2, y: y, z: 0),
+                  sourceOrigin: MTLOrigin(x: point.0, y: point.1, z: 0),
                   sourceSize: MTLSize(width: 1, height: 1, depth: 1), to: bytes,
                   destinationOffset: index * 256, destinationBytesPerRow: 256, destinationBytesPerImage: 256)
     }
@@ -77,8 +85,12 @@ func verifyPreviewOrientation(_ texture: MTLTexture, commands: MTLCommandBuffer)
     commands.addCompletedHandler { commands in
         if let error = commands.error { fail(error.localizedDescription) }
         let pixel = bytes.contents().assumingMemoryBound(to: UInt8.self)
-        guard pixel[2] > 180, pixel[0] < 60, pixel[256] > 180, pixel[258] < 60 else {
-            fail("Preview orientation failed: upper BGRA=\(Array(UnsafeBufferPointer(start: pixel, count: 4))), lower=\(Array(UnsafeBufferPointer(start: pixel+256, count: 4))). Expected red above blue.")
+        for index in points.indices {
+            let offset = index * 256
+            let red = index % 2 == 0
+            guard pixel[offset + (red ? 2 : 0)] > 180, pixel[offset + (red ? 0 : 2)] < 60 else {
+                fail("Preview orientation/fill failed at \(points[index]): \(Array(UnsafeBufferPointer(start: pixel + offset, count: 4))).")
+            }
         }
     }
 }
@@ -238,8 +250,11 @@ if mode == "--virtual-frame-test" {
 } else {
     print("""
     Camera Live native diagnostics
-      --virtual-frame-test                Check virtual-camera pixels, fit and buffer ownership
+      --virtual-frame-test                Check 720p/1080p pixels, fill and buffer ownership
       --virtual-camera-test               Check the installed extension through AVFoundation
+        --canvas 720p|1080p                Set the producer canvas (default 720p)
+        --receive-canvas 720p|1080p        Request a consumer size (default matches canvas)
+      --test-pattern NAME --preview --framed-preview  Check the cropped preview on screen
       --list                             Discover USB PTP cameras
       --capture [usb:PORT] [--preview]      Publish a real camera and report frame timing
       --test-pattern [name] [--preview]    Publish two test resolutions for 25 seconds

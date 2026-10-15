@@ -1,3 +1,30 @@
+## 2.4.0 macOS 26 interface refinements
+
+- Require macOS 26 or newer for the app and camera extension; remove the older inspector fallback and update the native CI runner.
+- Use the standard system title bar and window buttons, automatic toolbar styling and a native Liquid Glass primary action.
+- Hide the full-width toolbar backdrop while retaining the system glass controls and native inspector.
+- Correct the linked SDK version supplied by the CLT build so system controls receive current styling instead of legacy compatibility styling.
+- Remove the crop toolbar button and the entire bottom status bar. Camera and output details remain in the inspector.
+- Put Stream before Framing and open Stream whenever the inspector is reopened.
+- Remove the requested canvas, resolution-negotiation and Syphon explanatory text from the interface.
+
+## 2.3.0 Focus interface
+
+- Put the live preview first, with a native macOS toolbar and a camera sidebar that can be hidden.
+- Keep Framing beside the preview in an inspector, with Stream Details available in the same pane.
+- Bring Start/Stop Virtual Camera into the toolbar and show clear live, standby, approval and error states.
+- Use native system materials, semantic colours, accessible control labels and keyboard shortcuts; adopt Liquid Glass on macOS 26 while retaining macOS 13 support.
+- Retain the 2.2.0/build 8 camera extension and reuse it when the enabled version already matches, avoiding an unnecessary extension replacement for this UI update.
+
+## 2.2.0 Canvas and framing
+
+- Choose a 1280 × 720 or 1920 × 1080 canvas from the Framing toolbar control.
+- Fill the canvas by default with a centred, aspect-preserving crop, removing added side borders.
+- Adjust crop zoom and horizontal/vertical position, reset framing, and retain settings between launches.
+- Show the composed crop in the Metal preview while preserving the original Syphon feed.
+- Advertise both camera-extension formats and resize composed frames when a video app requests a different resolution.
+- Validate crop geometry/pixels, saved settings, live canvas changes, and both output sizes.
+
 ## 2.1.1 Virtual camera connection correction
 
 - Register the input queue callback required by Core Media I/O, fixing “Open virtual-camera input failed (0)” after extension approval. Unregister it when stopping or when stream startup fails.

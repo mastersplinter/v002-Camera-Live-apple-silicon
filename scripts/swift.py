@@ -16,6 +16,10 @@ ROOT = Path(__file__).resolve().parents[1]
 def build_environment():
     env = dict(os.environ, CLANG_MODULE_CACHE_PATH=str(ROOT / '.build/module-cache'),
                SWIFTPM_MODULECACHE_OVERRIDE=str(ROOT / '.build/module-cache'))
+    env['CAMERALIVE_MACOS_SDK_VERSION'] = subprocess.check_output(
+        ['xcrun', '--sdk', 'macosx', '--show-sdk-version'], text=True).strip()
+    if int(env['CAMERALIVE_MACOS_SDK_VERSION'].split('.')[0]) < 26:
+        raise SystemExit('Camera Live requires a macOS 26 or newer SDK. Select Xcode 26 or newer, or update Command Line Tools.')
     compiler = Path(subprocess.check_output(['xcrun', '--find', 'swiftc'], text=True).strip())
     pm = compiler.parent.parent / 'lib/swift/pm'
     module = pm / 'ManifestAPI/PackageDescription.swiftmodule'

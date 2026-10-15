@@ -6,10 +6,10 @@
     <key>CFBundleDisplayName</key><string>Camera Live</string>
     <key>CFBundleExecutable</key><string>CameraLive</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>2.1.1</string>
-    <key>CFBundleVersion</key><string>7</string>
+    <key>CFBundleShortVersionString</key><string>2.4.0</string>
+    <key>CFBundleVersion</key><string>11</string>
     <key>CFBundleIconFile</key><string>CameraLive</string>
-    <key>LSMinimumSystemVersion</key><string>13.0</string>
+    <key>LSMinimumSystemVersion</key><string>26.0</string>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSCameraUsageDescription</key><string>Camera Live shares your camera with video apps and checks its virtual-camera output.</string>
     <key>NSPrincipalClass</key><string>NSApplication</string>

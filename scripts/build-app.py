@@ -43,6 +43,20 @@ def main():
     app_info = plistlib.loads((APP / 'Contents/Info.plist').read_bytes())
     app_info['CameraLiveVirtualCameraInstallable'] = signing.enabled
     (APP / 'Contents/Info.plist').write_bytes(plistlib.dumps(app_info))
+    # Check the actual Mach-O deployment and SDK stamps, not just Info.plist.
+    # An old SDK stamp silently opts AppKit controls into compatibility styling.
+    for binary, info in [(executables / 'CameraLive', app_info),
+                         (executables / 'camera-live-diagnostics', app_info),
+                         (extension_executable, extension_info)]:
+        build = {}
+        for line in run('xcrun', 'vtool', '-show-build', binary, capture=True).splitlines():
+            fields = line.split()
+            if len(fields) == 2 and fields[0] in ('platform', 'minos', 'sdk'):
+                build[fields[0]] = fields[1]
+        expected = {'platform': 'MACOS', 'minos': info['LSMinimumSystemVersion'],
+                    'sdk': ENV['CAMERALIVE_MACOS_SDK_VERSION']}
+        if build != expected:
+            raise RuntimeError(f'Incorrect platform versions in {binary}: {build}; expected {expected}')
     shutil.copy2(ROOT / 'VIRTUAL_CAMERA.md', resources / 'VIRTUAL_CAMERA.md')
     entitlements_directory = ROOT / '.build/signing'
     entitlements_directory.mkdir(parents=True, exist_ok=True)

@@ -3,7 +3,7 @@ import Foundation
 import VirtualCameraShared
 
 protocol VirtualCameraTransport: AnyObject {
-    func start() throws
+    func start(canvas: VideoCanvas) throws
     func enqueue(_ sample: CMSampleBuffer) -> Bool
     func stop()
 }
@@ -37,10 +37,32 @@ final class CMIOVirtualCameraTransport: VirtualCameraTransport {
         }
     }
 
-    func start() throws {
+    private static func selectFormat(_ canvas: VideoCanvas, stream: CMIOStreamID) throws {
+        let format = try VirtualCameraFormat.description(canvas: canvas)
+        var reference = Unmanaged.passUnretained(format)
+        var address = CMIOObjectPropertyAddress(mSelector: UInt32(kCMIOStreamPropertyFormatDescription),
+            mScope: UInt32(kCMIOObjectPropertyScopeGlobal), mElement: UInt32(kCMIOObjectPropertyElementMain))
+        let status = withExtendedLifetime(format) {
+            withUnsafePointer(to: &reference) {
+                CMIOObjectSetPropertyData(stream, &address, 0, nil,
+                    UInt32(MemoryLayout<Unmanaged<CMFormatDescription>>.size), $0)
+            }
+        }
+        guard status == noErr else { throw VirtualCameraError.operation("Set virtual-camera canvas", status) }
+    }
+    func start(canvas: VideoCanvas) throws {
         stop()
         guard let device = Self.deviceID(), let stream = Self.ids(device, selector: UInt32(kCMIODevicePropertyStreams),
             scope: UInt32(kCMIODevicePropertyScopeOutput)).first else { throw VirtualCameraError.notInstalled }
+        try Self.selectFormat(canvas, stream: stream)
+        // Set the preferred source size too. A video app can subsequently select
+        // either advertised format; the extension honours that consumer choice.
+        // An active consumer may lock its format. That must not prevent sending
+        // the selected canvas to the sink: the extension can resize it instead.
+        if let source = Self.ids(device, selector: UInt32(kCMIODevicePropertyStreams),
+            scope: UInt32(kCMIODevicePropertyScopeInput)).first {
+            try? Self.selectFormat(canvas, stream: source)
+        }
         var queue: Unmanaged<CMSimpleQueue>?
         // A nil callback unregisters the client and can return success with no
         // queue. Register a callback even though the publisher polls capacity.

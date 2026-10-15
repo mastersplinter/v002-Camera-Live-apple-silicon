@@ -1,10 +1,13 @@
 import CoreImage
 import MetalKit
+import VirtualCameraShared
 
 /// Display-synchronised preview, independent of SwiftUI's status updates. The
 /// same decoded image is reused; no second JPEG decode or main-thread USB work.
 public final class CameraPreviewView: MTKView, MTKViewDelegate {
     public let frames: PreviewFrames
+    /// Nil retains the uncropped preview used by the capture diagnostics.
+    public var framing: VideoFraming?
     /// Optional presentation timing for the desktop performance diagnostic.
     public var didPresent: ((CFTimeInterval) -> Void)?
     /// Optional diagnostic hook to inspect the actual drawable before presentation.
@@ -16,6 +19,7 @@ public final class CameraPreviewView: MTKView, MTKViewDelegate {
     private let inFlight = DispatchSemaphore(value: 2)
     private var lastSequence: UInt64 = 0
     private var lastSize = CGSize.zero
+    private var lastFraming: VideoFraming?
 
     public init(frames: PreviewFrames) throws {
         guard let device = MTLCreateSystemDefaultDevice(), let queue = device.makeCommandQueue() else {
@@ -44,7 +48,7 @@ public final class CameraPreviewView: MTKView, MTKViewDelegate {
         let refreshRate = window?.screen?.maximumFramesPerSecond ?? 60
         if preferredFramesPerSecond != refreshRate { preferredFramesPerSecond = refreshRate }
         guard let frame = frames.snapshot(), drawableSize.width > 0, drawableSize.height > 0,
-              frame.sequence != lastSequence || drawableSize != lastSize,
+              frame.sequence != lastSequence || drawableSize != lastSize || framing != lastFraming,
               inFlight.wait(timeout: .now()) == .success else { return }
         guard let drawable = currentDrawable, let buffer = commands.makeCommandBuffer() else {
             inFlight.signal(); return
@@ -59,7 +63,16 @@ public final class CameraPreviewView: MTKView, MTKViewDelegate {
                                            y: (size.height - height * scale) / 2)
             .scaledBy(x: scale, y: scale)
         let bounds = CGRect(origin: .zero, size: size)
-        let image = CIImage(cgImage: frame.image).transformed(by: transform)
+        let source = CIImage(cgImage: frame.image)
+        let presented: CIImage
+        if let framing {
+            let canvasScale = min(size.width / framing.canvas.size.width, size.height / framing.canvas.size.height)
+            let canvasSize = CGSize(width: framing.canvas.size.width * canvasScale, height: framing.canvas.size.height * canvasScale)
+            let canvas = CGRect(x: (size.width - canvasSize.width) / 2, y: (size.height - canvasSize.height) / 2,
+                                width: canvasSize.width, height: canvasSize.height)
+            presented = source.transformed(by: framing.transform(source: source.extent.size, destination: canvas)).cropped(to: canvas)
+        } else { presented = source.transformed(by: transform) }
+        let image = presented
             .composited(over: CIImage(color: .black).cropped(to: bounds))
         context.render(image, to: drawable.texture, commandBuffer: buffer, bounds: bounds, colorSpace: colorSpace)
         inspectDrawable?(drawable.texture, buffer)
@@ -73,5 +86,6 @@ public final class CameraPreviewView: MTKView, MTKViewDelegate {
         submittedFrames += 1
         lastSequence = frame.sequence
         lastSize = size
+        lastFraming = framing
     }
 }

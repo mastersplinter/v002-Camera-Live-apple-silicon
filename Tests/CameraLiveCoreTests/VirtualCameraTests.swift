@@ -67,14 +67,22 @@ private final class FakeVirtualTransport: VirtualCameraTransport {
     private let lock = NSLock()
     private var active = false
     private var sent = 0
-    func start() throws { lock.lock(); active = true; lock.unlock() }
+    private var starts = 0
+    private var width = 0
+    private var lastBuffer: CVPixelBuffer?
+    func start(canvas: VideoCanvas) throws { lock.lock(); active = true; starts += 1; lock.unlock() }
     func enqueue(_ sample: CMSampleBuffer) -> Bool {
         lock.lock(); defer { lock.unlock() }
         guard active else { return false }
+        lastBuffer = CMSampleBufferGetImageBuffer(sample)
+        width = lastBuffer.map(CVPixelBufferGetWidth) ?? 0
         sent += 1; return true
     }
     func stop() { lock.lock(); active = false; lock.unlock() }
     var snapshot: (active: Bool, sent: Int) { lock.lock(); defer { lock.unlock() }; return (active, sent) }
+    var output: (starts: Int, width: Int, buffer: CVPixelBuffer?) {
+        lock.lock(); defer { lock.unlock() }; return (starts, width, lastBuffer)
+    }
 }
 
 struct VirtualCameraPublisherTests {
@@ -111,5 +119,27 @@ struct VirtualCameraPublisherTests {
         await withCheckedContinuation { continuation in publisher.shutdown { continuation.resume() } }
         #expect(!transport.snapshot.active)
         #expect(transport.snapshot.sent == 0)
+    }
+    @Test func framingChangesRefreshHeldImageAndCanvasChangesRestartTransport() async throws {
+        let transport = FakeVirtualTransport(), frames = PreviewFrames()
+        let publisher = VirtualCameraPublisher(transport: transport, report: { _ in })
+        let image = try JPEGDecoder.decode(makeJPEG(width: 32, height: 24)).image
+        frames.submit(image)
+        publisher.setFrames(frames); publisher.setEnabled(true)
+        defer { publisher.shutdown() }
+        #expect(await waitFor { transport.output.width == 1280 })
+        let first = try #require(transport.output.buffer)
+        let starts = transport.output.starts
+        publisher.setFraming(VideoFraming(zoom: 2, vertical: 0))
+        #expect(await waitFor { transport.output.buffer !== first })
+        #expect(transport.output.starts == starts)
+        frames.submit(image)
+        publisher.setFraming(VideoFraming(canvas: .hd1080, zoom: 2, vertical: 0))
+        #expect(await waitFor { transport.output.width == 1920 })
+        #expect(transport.output.starts == starts + 1)
+        frames.submit(image)
+        publisher.setFraming(VideoFraming())
+        #expect(await waitFor { transport.output.width == 1280 })
+        await withCheckedContinuation { continuation in publisher.shutdown { continuation.resume() } }
     }
 }

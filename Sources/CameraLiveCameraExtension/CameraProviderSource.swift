@@ -31,7 +31,10 @@ final class CameraDeviceSource: NSObject, CMIOExtensionDeviceSource {
     private(set) var input: CameraStreamSource!
     private let queue: DispatchQueue
     private let relay = VirtualCameraFrameRelay()
-    private let standby: CVPixelBuffer
+    private var standby: CVPixelBuffer
+    private var renderer: VideoFrameRenderer
+    private var resizedInput: CVPixelBuffer?
+    private var resizedOutput: CVPixelBuffer?
     private var timer: DispatchSourceTimer?
     private var sourceClients = 0
     private var producer: CMIOExtensionClient?
@@ -46,6 +49,7 @@ final class CameraDeviceSource: NSObject, CMIOExtensionDeviceSource {
     init(queue: DispatchQueue) throws {
         self.queue = queue
         standby = try VirtualCameraFormat.placeholder()
+        renderer = try VideoFrameRenderer()
         super.init()
         device = CMIOExtensionDevice(localizedName: VirtualCameraFormat.name,
             deviceID: VirtualCameraFormat.deviceID, legacyDeviceID: nil, source: self)
@@ -97,6 +101,7 @@ final class CameraDeviceSource: NSObject, CMIOExtensionDeviceSource {
             generation += 1
             producer = nil; authorizedProducer = nil; consuming = false
             relay.clear()
+            resizedInput = nil; resizedOutput = nil
         }
         if sourceClients == 0, producer == nil { timer?.cancel(); timer = nil }
     }
@@ -107,6 +112,16 @@ final class CameraDeviceSource: NSObject, CMIOExtensionDeviceSource {
         if authorizedProducer?.clientID == client.clientID { authorizedProducer = nil }
     }
 
+    func changeFormat(_ canvas: VideoCanvas, direction: CMIOExtensionStream.Direction) throws {
+        if direction == .source {
+            // Prepare resources before accepting the property change.
+            let replacement = try VideoFrameRenderer(canvas: canvas)
+            let placeholder = try VirtualCameraFormat.placeholder(canvas: canvas)
+            renderer = replacement; standby = placeholder; wasLive = false
+        } else { relay.clear() }
+        resizedInput = nil; resizedOutput = nil
+    }
+
     private func tick() {
         if producer != nil, !consuming { consume(remaining: VirtualCameraFormat.queueSize) }
         guard sourceClients > 0 else { return }
@@ -114,7 +129,17 @@ final class CameraDeviceSource: NSObject, CMIOExtensionDeviceSource {
         let image = relay.frame(at: ProcessInfo.processInfo.systemUptime)
         let live = image != nil
         do {
-            let sample = try VirtualCameraFormat.sample(image ?? standby, at: now)
+            let delivered: CVPixelBuffer
+            if let image, CVPixelBufferGetWidth(image) != renderer.canvas.width || CVPixelBufferGetHeight(image) != renderer.canvas.height {
+                if resizedInput !== image || resizedOutput == nil {
+                    resizedOutput = try renderer.resize(image); resizedInput = image
+                }
+                delivered = resizedOutput!
+            } else {
+                resizedInput = nil; resizedOutput = nil
+                delivered = image ?? standby
+            }
+            let sample = try VirtualCameraFormat.sample(delivered, at: now)
             output.stream.send(sample, discontinuity: live != wasLive ? .time : [],
                 hostTimeInNanoseconds: UInt64(CMTimeConvertScale(now, timescale: 1_000_000_000, method: .default).value))
             wasLive = live
@@ -130,7 +155,9 @@ final class CameraDeviceSource: NSObject, CMIOExtensionDeviceSource {
             self.queue.async {
                 guard token == self.generation else { return }
                 self.consuming = false
-                if error == nil, let sample, let image = CMSampleBufferGetImageBuffer(sample) {
+                if error == nil, let sample, let image = CMSampleBufferGetImageBuffer(sample),
+                   CVPixelBufferGetWidth(image) == self.input.canvas.width,
+                   CVPixelBufferGetHeight(image) == self.input.canvas.height {
                     self.relay.receive(image, at: ProcessInfo.processInfo.systemUptime)
                 }
                 if sample != nil {
@@ -149,10 +176,14 @@ final class CameraStreamSource: NSObject, CMIOExtensionStreamSource {
     let formats: [CMIOExtensionStreamFormat]
     private weak var owner: CameraDeviceSource?
     private let direction: CMIOExtensionStream.Direction
+    private var activeFormatIndex = 0
+    var canvas: VideoCanvas { VideoCanvas.allCases[activeFormatIndex] }
     init(owner: CameraDeviceSource, direction: CMIOExtensionStream.Direction) throws {
         self.owner = owner; self.direction = direction
-        formats = [CMIOExtensionStreamFormat(formatDescription: try VirtualCameraFormat.description(),
-            maxFrameDuration: VirtualCameraFormat.frameDuration, minFrameDuration: VirtualCameraFormat.frameDuration, validFrameDurations: nil)]
+        formats = try VideoCanvas.allCases.map { canvas in
+            CMIOExtensionStreamFormat(formatDescription: try VirtualCameraFormat.description(canvas: canvas),
+                maxFrameDuration: VirtualCameraFormat.frameDuration, minFrameDuration: VirtualCameraFormat.frameDuration, validFrameDurations: nil)
+        }
         super.init()
         stream = CMIOExtensionStream(localizedName: direction == .source ? "Camera Live Video" : "Camera Live Input",
             streamID: direction == .source ? VirtualCameraFormat.sourceID : VirtualCameraFormat.sinkID,
@@ -165,7 +196,7 @@ final class CameraStreamSource: NSObject, CMIOExtensionStreamSource {
     }
     func streamProperties(forProperties properties: Set<CMIOExtensionProperty>) throws -> CMIOExtensionStreamProperties {
         let result = CMIOExtensionStreamProperties(dictionary: [:])
-        if properties.contains(.streamActiveFormatIndex) { result.activeFormatIndex = 0 }
+        if properties.contains(.streamActiveFormatIndex) { result.activeFormatIndex = activeFormatIndex }
         if properties.contains(.streamFrameDuration) { result.frameDuration = VirtualCameraFormat.frameDuration }
         if properties.contains(.streamSinkBufferQueueSize) { result.sinkBufferQueueSize = VirtualCameraFormat.queueSize }
         if properties.contains(.streamSinkBuffersRequiredForStartup) { result.sinkBuffersRequiredForStartup = 1 }
@@ -173,9 +204,14 @@ final class CameraStreamSource: NSObject, CMIOExtensionStreamSource {
         return result
     }
     func setStreamProperties(_ streamProperties: CMIOExtensionStreamProperties) throws {
-        if let format = streamProperties.activeFormatIndex, format != 0 { throw VirtualCameraError.invalidFrame }
+        if let format = streamProperties.activeFormatIndex, !formats.indices.contains(format) { throw VirtualCameraError.invalidFrame }
         if let duration = streamProperties.frameDuration, CMTimeCompare(duration, VirtualCameraFormat.frameDuration) != 0 {
             throw VirtualCameraError.invalidFrame
+        }
+        if let format = streamProperties.activeFormatIndex, format != activeFormatIndex {
+            try owner?.changeFormat(VideoCanvas.allCases[format], direction: direction)
+            activeFormatIndex = format
+            stream.notifyPropertiesChanged([.streamActiveFormatIndex: CMIOExtensionPropertyState<AnyObject>(value: NSNumber(value: format))])
         }
     }
     func authorizedToStartStream(for client: CMIOExtensionClient) -> Bool { owner?.authorize(client, direction: direction) ?? false }

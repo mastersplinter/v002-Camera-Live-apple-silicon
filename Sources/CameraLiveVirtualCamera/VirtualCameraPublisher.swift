@@ -12,6 +12,10 @@ public final class VirtualCameraPublisher {
     private let queue = DispatchQueue(label: "info.v002.CameraLive.virtual-camera", qos: .userInitiated)
     private let report: (VirtualCameraOutputStatus) -> Void
     private var timer: DispatchSourceTimer?
+    private enum TimerMode { case video, retry }
+    private var timerMode: TimerMode?
+    private var timerGeneration: UInt64 = 0
+    private var frameObservation: PreviewFrames.Observation?
     private var frames: PreviewFrames?
     private var enabled = false
     private var connected = false
@@ -35,34 +39,36 @@ public final class VirtualCameraPublisher {
     }
     public func setFrames(_ frames: PreviewFrames?) {
         queue.async {
+            self.cancelTimer(); self.frameObservation = nil
             self.disconnect()
             self.frames = frames; self.retryAt = 0
+            if self.enabled { self.tick() }
         }
     }
     public func setFraming(_ framing: VideoFraming) {
         queue.async { [self] in
             guard self.framing != framing else { return }
-            if self.framing.canvas != framing.canvas {
-                disconnect(); renderer = nil; retryAt = 0
+            let changedCanvas = self.framing.canvas != framing.canvas
+            if changedCanvas {
+                cancelTimer(); disconnect(); retryAt = 0
             }
             self.framing = framing
             // Crop changes must be visible even when reusing the same camera frame.
             lastImage = nil; lastSequence = 0
+            if changedCanvas, enabled { tick() }
         }
     }
     public func setEnabled(_ enabled: Bool) {
         queue.async { [self] in
-            self.enabled = enabled
             if enabled {
-                guard self.timer == nil else { return }
+                guard !self.enabled else { return }
+                self.enabled = true
                 self.retryAt = 0
-                let timer = DispatchSource.makeTimerSource(queue: self.queue)
-                timer.schedule(deadline: .now(), repeating: .nanoseconds(1_000_000_000 / Int(VirtualCameraFormat.framesPerSecond)), leeway: .milliseconds(1))
-                timer.setEventHandler { [weak self] in self?.tick() }
-                self.timer = timer; timer.resume()
+                self.tick()
             } else {
-                self.timer?.cancel(); self.timer = nil
-                self.disconnect(); self.renderer = nil
+                self.enabled = false
+                self.cancelTimer(); self.frameObservation = nil
+                self.disconnect()
                 self.status(.stopped)
             }
         }
@@ -78,15 +84,60 @@ public final class VirtualCameraPublisher {
     private func disconnect() {
         transport.stop(); connected = false
         lastImage = nil; lastSequence = 0
+        renderer = nil
     }
+
+    private func cancelTimer() {
+        timerGeneration &+= 1
+        timer?.cancel(); timer = nil; timerMode = nil
+    }
+
+    private func schedule(_ mode: TimerMode) {
+        if mode == .video, timerMode == .video { return }
+        cancelTimer()
+        let token = timerGeneration
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        if mode == .video {
+            let interval = DispatchTimeInterval.nanoseconds(1_000_000_000 / Int(VirtualCameraFormat.framesPerSecond))
+            timer.schedule(deadline: .now() + interval, repeating: interval, leeway: .milliseconds(1))
+        } else {
+            timer.schedule(deadline: .now() + max(0.001, retryAt - ProcessInfo.processInfo.systemUptime), leeway: .milliseconds(1))
+        }
+        timer.setEventHandler { [weak self] in
+            guard let self, token == self.timerGeneration else { return }
+            if mode == .retry { self.cancelTimer() }
+            self.tick()
+        }
+        self.timer = timer; timerMode = mode; timer.resume()
+    }
+
+    private func waitForFreshFrame() {
+        cancelTimer()
+        if frameObservation == nil {
+            frameObservation = frames?.observe(on: queue) { [weak self] in self?.tick() }
+            // Close the race between the initial empty/stale snapshot and
+            // subscribing. The newest frame may have arrived in that interval.
+            if let frame = frames?.snapshot(),
+               ProcessInfo.processInfo.systemUptime - frame.receivedAt < VirtualCameraFormat.staleInterval {
+                tick()
+            }
+        }
+    }
+
     private func tick() {
+        autoreleasepool { publishIfReady() }
+    }
+
+    private func publishIfReady() {
         guard enabled else { return }
         let now = ProcessInfo.processInfo.systemUptime
         guard let frame = frames?.snapshot(), now - frame.receivedAt < VirtualCameraFormat.staleInterval else {
             if connected { disconnect() }
-            status(.waitingForCamera); return
+            status(.waitingForCamera)
+            waitForFreshFrame(); return
         }
-        guard now >= retryAt else { return }
+        frameObservation = nil
+        guard now >= retryAt else { schedule(.retry); return }
         do {
             if !connected {
                 try transport.start(canvas: framing.canvas); connected = true; lastAccepted = now
@@ -104,12 +155,15 @@ public final class VirtualCameraPublisher {
                 // A removed/restarted extension or wedged sink must not retain
                 // an ever-growing queue or keep reporting a working broadcast.
                 disconnect(); retryAt = now + 1; status(.waitingForExtension)
+                schedule(.retry); return
             }
+            schedule(.video)
         } catch {
             disconnect(); retryAt = now + 1
             if case VirtualCameraError.notInstalled = error { status(.waitingForExtension) }
             else { status(.failed(error.localizedDescription)) }
+            schedule(.retry)
         }
     }
-    deinit { timer?.cancel(); transport.stop() }
+    deinit { timer?.cancel(); frameObservation?.cancel(); transport.stop() }
 }

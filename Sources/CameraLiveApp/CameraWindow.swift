@@ -501,5 +501,5 @@ private struct LivePreview: NSViewRepresentable {
         }
     }
     func updateNSView(_ view: NSView, context: Context) { (view as? CameraPreviewView)?.framing = framing }
-    static func dismantleNSView(_ view: NSView, coordinator: ()) { (view as? CameraPreviewView)?.isPaused = true }
+    static func dismantleNSView(_ view: NSView, coordinator: ()) { (view as? CameraPreviewView)?.stopDisplaying() }
 }

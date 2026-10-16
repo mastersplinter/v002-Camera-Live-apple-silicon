@@ -33,8 +33,8 @@ final class FrameTimings {
         lock.lock(); defer { lock.unlock() }
         times.append(time)
     }
-    func summary(_ label: String) -> String {
-        lock.lock(); let all = times.sorted(); lock.unlock()
+    func summary(_ label: String, since start: TimeInterval = 0) -> String {
+        lock.lock(); let all = times.filter { $0 >= start }.sorted(); lock.unlock()
         // Exclude the first two seconds of camera/GPU startup from cadence data.
         let samples = all.filter { $0 >= (all.first ?? 0) + 2 }
         guard samples.count > 1, let first = samples.first, let last = samples.last else {
@@ -60,6 +60,7 @@ func previewWindow(frames: PreviewFrames, timings: FrameTimings, checkPattern: B
                           styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
     window.title = "Camera Live — frame pacing test"
     window.isReleasedWhenClosed = false
+    if CommandLine.arguments.contains("--keep-visible") { window.level = .floating }
     window.contentView = view
     window.makeKeyAndOrderFront(nil)
     app.finishLaunching()
@@ -144,7 +145,11 @@ func verifyPattern(_ texture: MTLTexture, device: MTLDevice) {
 }
 let args = Array(CommandLine.arguments.dropFirst())
 let mode = args.first ?? "--help"
-if mode == "--virtual-frame-test" {
+if mode == "--virtual-resource-test" {
+    do { try profileVirtualCameraResources() } catch { fail(error.localizedDescription) }
+} else if mode == "--preview-lifecycle-test" {
+    do { try verifyPreviewLifecycle() } catch { fail(error.localizedDescription) }
+} else if mode == "--virtual-frame-test" {
     do { try verifyVirtualFrames() } catch { fail(error.localizedDescription) }
 } else if mode == "--virtual-camera-test" {
     do { try verifyInstalledVirtualCamera() } catch { fail(error.localizedDescription) }
@@ -250,6 +255,12 @@ if mode == "--virtual-frame-test" {
 } else {
     print("""
     Camera Live native diagnostics
+      --virtual-resource-test --canvas 720p|1080p  Profile waiting/live/stale/resumed/stopped phases
+        --receive-output                  Also verify frames through the installed camera
+        --stream-seconds N                 Seconds in each live phase (default 20)
+        --syphon-source NAME               Include JPEG decoding and a discoverable Syphon source
+      --preview-lifecycle-test --framed-preview  Check preview redraw, visibility and cleanup
+        --keep-visible                    Keep the generated-video test window above normal windows
       --virtual-frame-test                Check 720p/1080p pixels, fill and buffer ownership
       --virtual-camera-test               Check the installed extension through AVFoundation
         --canvas 720p|1080p                Set the producer canvas (default 720p)

@@ -1,5 +1,71 @@
 # Validation
 
+## Release 2.4.3, 16 October 2026
+
+Version 2.4.3/build 19 packages the resource-efficiency update accepted in live
+Canon/Zoom use below. Release preparation changes documentation only; the
+notarized executable and unchanged camera extension are the tested installation.
+
+- Extracted `dist/releases/2.4.3/Camera-Live-2.4.3-arm64.zip` passed deep/strict
+  signature verification, notarization-ticket validation and Gatekeeper assessment.
+  Every file and symlink matches the signed build.
+- SHA-256: `285a008d445d7820592ea7fdb4ed52aca1e623eb53cbbf883efe106fb2c3ad12`.
+- The existing 37-test Swift suite, synthetic output checks, actual live-camera
+  receiver checks and user acceptance are detailed below. No runtime change
+  was introduced after those checks.
+
+## Installed resource-efficiency update, 16 October 2026
+
+Camera Live 2.4.3/build 19 is installed and running. Apple accepted notarization
+`9b8d33f0-7c03-4635-8b64-2630291bc254`; the stapled ticket and Gatekeeper
+assessment passed. Installed binaries and resource signature match the signed
+build. The camera extension remains 2.4.0/build 10 with unchanged CodeDirectory
+hash `b0d31a735387c7211d5655f2a3874cdafc875d1d`. The prior installation is
+retained under `.build/installed-backup-20261016-074812/`.
+
+The user confirmed smooth preview and Zoom video, then confirmed crop controls,
+a small window and minimizing/restoring all work while Zoom stays smooth.
+Independent AVFoundation checks received changing live Canon video at both 720p
+and 1080p with zero invalid frames. All 37 Swift tests and the recorded synthetic
+pixel, cadence, lifecycle, reconnect and concurrent-output checks passed within
+their stated scope; the optional strict held-frame timestamp limitation is
+explicitly recorded below and in [PERFORMANCE.md](PERFORMANCE.md).
+
+With live preview and virtual camera active, short before/after observations
+recorded CPU 39.79% → 28.56% of one core, median process footprint 259.09 →
+228.00 MiB, and interrupt wakeups 184.96 → 70.51 per second. These are
+measurements on this Mac with live scene content, not a replay or total-system
+energy measurement. A subsequent two-minute run after interactive checks used
+32.11% CPU, 242.33 MiB median footprint and 244.50 MiB maximum; it is a separate
+stability observation, not a matched replay. The user subsequently requested committing and releasing this accepted update.
+
+## Preview resource comparison, 16 October 2026
+
+The 2.4.3 candidate passed a controlled visible/hidden/restored preview comparison
+against the original preview from 2.4.2. While hidden, it submitted zero GPU
+renders over eight seconds; the original submitted 240. Median process footprint
+fell from 183.5 to 43.6 MiB and CPU from 6.04% to 2.40% of one core. The candidate
+presented 360 frames in twelve seconds after restoring its rendering resources.
+These are preview-fixture measurements, including synthetic input generation,
+not whole-app or live-Canon measurements. Full methods and results are in
+[PERFORMANCE.md](PERFORMANCE.md); `scripts/profile-preview.py` preserves the
+fixture and comparison procedure.
+
+The candidate was subsequently notarized and installed, with live Canon/Zoom
+acceptance recorded above. The optional strict held-frame presentation check
+returns zero timestamps in both original and optimized isolated previews even
+with active, visible windows and a temporary display-sleep assertion. No pass
+is claimed for that specific instrumentation check; streaming and user-visible
+restoration passed.
+
+## Resource-efficiency candidate 2.4.3, 15 October 2026
+
+Version 2.4.3/build 19 was initially a local candidate and has now been installed
+and accepted as recorded above; the same build is packaged for release 2.4.3.
+The camera extension remains 2.4.0/build 10. [PERFORMANCE.md](PERFORMANCE.md)
+records the implementation, calibrated before/after measurements, automated
+checks, live Canon/Zoom acceptance and measurement limits.
+
 ## Release 2.4.2, 15 October 2026
 
 Version 2.4.2/build 18 packages the smaller minimum window, combined controls popover, inspector cleanup and compact virtual-camera button accepted by the user in build 17. The executable source is unchanged from the accepted installation; only release version/build metadata changed. The camera extension remains 2.4.0/build 10.

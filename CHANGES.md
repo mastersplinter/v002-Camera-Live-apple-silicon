@@ -1,3 +1,10 @@
+## 2.4.3 Resource efficiency
+
+- Render and allocate Syphon output resources only while a viewer is connected, while keeping the source discoverable for late viewers.
+- Redraw the preview for new frames, cropping and resizing; stop polling unchanged frames and release hidden-preview rendering caches.
+- Suspend virtual-camera polling when input is missing and release rendering buffers after input stops, preserving active frame cadence and extension recovery.
+- Keep the accepted interface, crop controls, camera capture and both output resolutions. Add repeatable resource measurements and lifecycle diagnostics; see PERFORMANCE.md for measured results, live Canon/Zoom acceptance and measurement limits.
+
 ## 2.4.0 macOS 26 interface refinements
 
 - Require macOS 26 or newer for the app and camera extension; remove the older inspector fallback and update the native CI runner.

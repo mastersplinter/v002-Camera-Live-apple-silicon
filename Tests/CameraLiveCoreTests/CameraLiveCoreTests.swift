@@ -87,6 +87,56 @@ struct JPEGDecoderTests {
 
 struct PreviewFrameTests {
     @Test
+    func testObserverCoalescesBlockedQueueAndReadsNewestFrame() throws {
+        let frames = PreviewFrames(), queue = DispatchQueue(label: "preview-observer-test")
+        let image = try JPEGDecoder.decode(makeJPEG(width: 32, height: 24)).image
+        var sequences: [UInt64] = []
+        let observation = frames.observe(on: queue) {
+            if let frame = frames.snapshot() { sequences.append(frame.sequence) }
+        }
+        queue.suspend()
+        DispatchQueue.concurrentPerform(iterations: 1000) { _ in frames.submit(image) }
+        queue.resume()
+        queue.sync { #expect(sequences == [1000]) }
+        frames.submit(image)
+        queue.sync { #expect(sequences == [1000, 1001]) }
+        observation.cancel()
+    }
+
+    @Test
+    func testCancellingObserverSuppressesAlreadyQueuedDelivery() throws {
+        let frames = PreviewFrames(), queue = DispatchQueue(label: "preview-cancellation-test")
+        let image = try JPEGDecoder.decode(makeJPEG(width: 32, height: 24)).image
+        var deliveries = 0
+        var observation: PreviewFrames.Observation? = frames.observe(on: queue) { deliveries += 1 }
+        queue.suspend()
+        frames.submit(image)
+        observation?.cancel()
+        observation = nil
+        queue.resume()
+        queue.sync { #expect(deliveries == 0) }
+        frames.submit(image)
+        queue.sync { #expect(deliveries == 0) }
+    }
+
+    @Test
+    func testObserversCanCloseStoreAndReleaseIndependently() throws {
+        let frames = PreviewFrames(), queue = DispatchQueue(label: "preview-close-test")
+        let image = try JPEGDecoder.decode(makeJPEG(width: 32, height: 24)).image
+        var events: [Bool] = []
+        let observation = frames.observe(on: queue) {
+            events.append(frames.snapshot() != nil)
+            frames.close() // Must not hold the store lock while calling observers.
+        }
+        frames.submit(image)
+        queue.sync {} // Closure notification can be enqueued behind this barrier.
+        queue.sync { #expect(events == [true, false]) }
+        frames.submit(image)
+        queue.sync { #expect(events == [true, false]) }
+        observation.cancel()
+    }
+
+    @Test
     func testDisplayAlwaysSamplesNewestFrameWithoutAnImageQueue() throws {
         let frames = PreviewFrames()
         let first = try JPEGDecoder.decode(makeJPEG(width: 32, height: 24)).image

@@ -58,7 +58,7 @@ func verifyVirtualFrames() throws {
     print("PASS: 720p/1080p virtual camera GPU and CPU pixels, upright orientation, borderless fill, immutable in-flight buffers and standby frame.")
 }
 
-private final class VirtualCameraReceiver: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
+final class VirtualCameraReceiver: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     let canvas: VideoCanvas
     init(canvas: VideoCanvas) { self.canvas = canvas; super.init() }
     let timings = FrameTimings()

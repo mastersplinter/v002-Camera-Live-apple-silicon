@@ -70,7 +70,14 @@ private final class FakeVirtualTransport: VirtualCameraTransport {
     private var starts = 0
     private var width = 0
     private var lastBuffer: CVPixelBuffer?
-    func start(canvas: VideoCanvas) throws { lock.lock(); active = true; starts += 1; lock.unlock() }
+    private var unavailable = false
+    func setUnavailable(_ value: Bool) { lock.lock(); unavailable = value; lock.unlock() }
+    func start(canvas: VideoCanvas) throws {
+        lock.lock(); defer { lock.unlock() }
+        starts += 1
+        if unavailable { throw VirtualCameraError.notInstalled }
+        active = true
+    }
     func enqueue(_ sample: CMSampleBuffer) -> Bool {
         lock.lock(); defer { lock.unlock() }
         guard active else { return false }
@@ -78,7 +85,7 @@ private final class FakeVirtualTransport: VirtualCameraTransport {
         width = lastBuffer.map(CVPixelBufferGetWidth) ?? 0
         sent += 1; return true
     }
-    func stop() { lock.lock(); active = false; lock.unlock() }
+    func stop() { lock.lock(); active = false; lastBuffer = nil; lock.unlock() }
     var snapshot: (active: Bool, sent: Int) { lock.lock(); defer { lock.unlock() }; return (active, sent) }
     var output: (starts: Int, width: Int, buffer: CVPixelBuffer?) {
         lock.lock(); defer { lock.unlock() }; return (starts, width, lastBuffer)
@@ -92,6 +99,72 @@ struct VirtualCameraPublisherTests {
             try? await Task.sleep(nanoseconds: 20_000_000)
         }
         return predicate()
+    }
+
+    @Test func waitingSenderAcceptsLateSourceAndIgnoresReplacedSource() async throws {
+        let transport = FakeVirtualTransport()
+        let publisher = VirtualCameraPublisher(transport: transport, report: { _ in })
+        let first = PreviewFrames(), second = PreviewFrames()
+        let image = try JPEGDecoder.decode(makeJPEG(width: 32, height: 24)).image
+        publisher.setEnabled(true)
+        try? await Task.sleep(nanoseconds: 80_000_000)
+        first.submit(image)
+        publisher.setFrames(first)
+        #expect(await waitFor { transport.snapshot.sent > 0 })
+        publisher.setFrames(second)
+        #expect(await waitFor { !transport.snapshot.active })
+        let before = transport.snapshot.sent
+        first.submit(image)
+        try? await Task.sleep(nanoseconds: 80_000_000)
+        #expect(transport.snapshot.sent == before)
+        second.submit(image)
+        #expect(await waitFor { transport.snapshot.sent > before })
+        await withCheckedContinuation { continuation in publisher.shutdown { continuation.resume() } }
+    }
+
+    @Test func disabledWaitingSenderDoesNotWakeUntilReenabled() async throws {
+        let transport = FakeVirtualTransport(), frames = PreviewFrames()
+        let publisher = VirtualCameraPublisher(transport: transport, report: { _ in })
+        let image = try JPEGDecoder.decode(makeJPEG(width: 32, height: 24)).image
+        publisher.setFrames(frames); publisher.setEnabled(true)
+        // Repeated enable must preserve the pending first-frame subscription.
+        publisher.setEnabled(true)
+        frames.submit(image)
+        #expect(await waitFor { transport.snapshot.sent > 0 })
+        #expect(await waitFor { !transport.snapshot.active })
+        publisher.setEnabled(false)
+        // Shutdown completion also acts as a barrier for queued cancellation.
+        await withCheckedContinuation { continuation in publisher.shutdown { continuation.resume() } }
+        publisher.setFrames(frames)
+        let before = transport.snapshot.sent
+        frames.submit(image)
+        try? await Task.sleep(nanoseconds: 80_000_000)
+        #expect(transport.snapshot.sent == before)
+        publisher.setEnabled(true)
+        #expect(await waitFor { transport.snapshot.sent > before })
+        await withCheckedContinuation { continuation in publisher.shutdown { continuation.resume() } }
+    }
+
+    @Test func unavailableExtensionRetriesAndRecoversWithFreshInput() async throws {
+        let transport = FakeVirtualTransport(), frames = PreviewFrames()
+        transport.setUnavailable(true)
+        let publisher = VirtualCameraPublisher(transport: transport, report: { _ in })
+        let image = try JPEGDecoder.decode(makeJPEG(width: 32, height: 24)).image
+        let feeder = Task {
+            while !Task.isCancelled {
+                frames.submit(image)
+                try? await Task.sleep(nanoseconds: 30_000_000)
+            }
+        }
+        defer { feeder.cancel(); publisher.shutdown() }
+        publisher.setFrames(frames); publisher.setEnabled(true)
+        #expect(await waitFor { transport.output.starts == 1 })
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        #expect(transport.output.starts == 1)
+        transport.setUnavailable(false)
+        #expect(await waitFor { transport.snapshot.sent > 0 })
+        #expect(transport.output.starts == 2)
+        await withCheckedContinuation { continuation in publisher.shutdown { continuation.resume() } }
     }
     @Test func staleInputStopsSendingAndFreshInputResumes() async throws {
         let transport = FakeVirtualTransport(), frames = PreviewFrames()
